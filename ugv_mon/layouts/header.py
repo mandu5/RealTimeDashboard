@@ -77,6 +77,8 @@ def create_header_bar(data: Dict) -> html.Div:
                         style={
                             "display": "flex",
                             "gap": "8px",
+                            "flexWrap": "nowrap",
+                            "alignItems": "center",
                         }
                     ),
                 ],
@@ -115,20 +117,24 @@ def create_status_chips(data: Dict) -> list:
             "연결상태",
             "연결됨" if is_connected else "연결끊김",
             "success" if is_connected else "destructive",
+            min_width="100px",
         ),
         create_status_chip(
             "인터페이스",
             data.get("interface", "---"),
             "default",
+            min_width="100px",
         ),
         create_status_chip(
             "필터",
             data.get("filter", "---"),
             "default",
+            min_width="100px",
         ),
         create_status_chip(
             "마지막 패킷",
             data.get("lastPacketTime", "---"),
             "info",
+            min_width="140px",
         ),
     ]

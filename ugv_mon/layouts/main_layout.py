@@ -53,7 +53,7 @@ def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantinePro
             # Data stores
             dcc.Store(id="dashboard-data", data=initial_data),
             dcc.Store(id="is-paused", data=False),
-            dcc.Store(id="auto-scroll", data=True),
+            dcc.Store(id="chart-time-range", data=60),  # Default: 1 minute (60 seconds)
             
             # Polling interval
             dcc.Interval(
@@ -138,40 +138,133 @@ def create_charts_panel(data: Dict) -> dmc.Card:
     """
     Create the communication quality charts panel.
     
-    Contains combined PPS + Jitter time series charts.
+    Contains combined PPS + Jitter time series charts with:
+    - Time range selection buttons (30s, 1m, 5m)
+    - Real-time PPS and Jitter values display
     
     Args:
         data: Dashboard state with chart data
         
     Returns:
-        Mantine Card with embedded Plotly chart
+        Mantine Card with embedded Plotly chart and controls
     """
+    # Get latest values for display
+    chart_data = data.get("combinedData", [])
+    latest_pps = chart_data[-1].get("pps", 0) if chart_data else 0
+    latest_jitter = chart_data[-1].get("jitter", 0) if chart_data else 0
+    
     return dmc.Card(
         children=[
-            # Panel header
+            # Panel header with title and time range buttons
             html.Div(
                 children=[
+                    # Title section
                     html.Div(
+                        children=[
+                            html.Div(
+                                style={
+                                    "width": "4px",
+                                    "height": "16px",
+                                    "backgroundColor": "#3b82f6",
+                                    "borderRadius": "9999px",
+                                }
+                            ),
+                            html.Div(
+                                "통신 품질 차트",
+                                style={
+                                    "fontSize": "14px",
+                                    "fontWeight": "600",
+                                    "color": "#334155",
+                                }
+                            ),
+                        ],
                         style={
-                            "width": "4px",
-                            "height": "16px",
-                            "backgroundColor": "#3b82f6",
-                            "borderRadius": "9999px",
+                            "display": "flex",
+                            "alignItems": "center",
+                            "gap": "8px",
                         }
                     ),
+                    # Legend (PPS and Jitter)
                     html.Div(
-                        "통신 품질 차트",
+                        children=[
+                            html.Div(
+                                children=[
+                                    html.Div(
+                                        style={
+                                            "width": "12px",
+                                            "height": "12px",
+                                            "backgroundColor": "#3b82f6",
+                                            "borderRadius": "50%",
+                                        }
+                                    ),
+                                    html.Span("PPS (좌)", style={"fontSize": "12px", "color": "#64748b"}),
+                                ],
+                                style={
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "gap": "6px",
+                                }
+                            ),
+                            html.Div(
+                                children=[
+                                    html.Div(
+                                        style={
+                                            "width": "12px",
+                                            "height": "12px",
+                                            "backgroundColor": "#9333ea",
+                                            "borderRadius": "50%",
+                                        }
+                                    ),
+                                    html.Span("지터 (우)", style={"fontSize": "12px", "color": "#64748b"}),
+                                ],
+                                style={
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "gap": "6px",
+                                }
+                            ),
+                        ],
                         style={
-                            "fontSize": "14px",
-                            "fontWeight": "600",
-                            "color": "#334155",
+                            "display": "flex",
+                            "alignItems": "center",
+                            "gap": "16px",
+                        }
+                    ),
+                    # Time range buttons
+                    html.Div(
+                        children=[
+                            dmc.Button(
+                                "30s",
+                                id="time-range-30s",
+                                variant="outline",
+                                size="xs",
+                                style={"minWidth": "40px"},
+                            ),
+                            dmc.Button(
+                                "1m",
+                                id="time-range-1m",
+                                variant="filled",
+                                size="xs",
+                                style={"minWidth": "40px"},
+                            ),
+                            dmc.Button(
+                                "5m",
+                                id="time-range-5m",
+                                variant="outline",
+                                size="xs",
+                                style={"minWidth": "40px"},
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "gap": "4px",
                         }
                     ),
                 ],
                 style={
                     "display": "flex",
+                    "justifyContent": "space-between",
                     "alignItems": "center",
-                    "gap": "8px",
                     "marginBottom": "16px",
                 }
             ),
@@ -182,8 +275,66 @@ def create_charts_panel(data: Dict) -> dmc.Card:
                     data.get("combinedData", []),
                     data.get("jitterP95", 0),
                     data.get("jitterP99", 0),
+                    60,  # Default time range: 60 seconds
                 ),
-                config={"displayModeBar": False},
+                config={
+                    "displayModeBar": False,
+                    "staticPlot": False,
+                    "doubleClick": False,
+                },
+            ),
+            # Bottom metrics display
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Span("PPS: ", style={"fontSize": "13px", "color": "#64748b"}),
+                            html.Span(
+                                id="current-pps-display",
+                                children=f"{latest_pps:,}",
+                                style={
+                                    "fontSize": "13px",
+                                    "fontWeight": "600",
+                                    "color": "#1e40af",
+                                    "fontFamily": "monospace",
+                                }
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "alignItems": "center",
+                            "gap": "4px",
+                        }
+                    ),
+                    html.Div(
+                        children=[
+                            html.Span("지터: ", style={"fontSize": "13px", "color": "#64748b"}),
+                            html.Span(
+                                id="current-jitter-display",
+                                children=f"{latest_jitter:.1f} ms",
+                                style={
+                                    "fontSize": "13px",
+                                    "fontWeight": "600",
+                                    "color": "#7c3aed",
+                                    "fontFamily": "monospace",
+                                }
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "alignItems": "center",
+                            "gap": "4px",
+                        }
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "justifyContent": "space-between",
+                    "alignItems": "center",
+                    "marginTop": "12px",
+                    "paddingTop": "12px",
+                    "borderTop": "1px solid #e5e7eb",
+                }
             ),
         ],
         withBorder=True,
@@ -238,7 +389,11 @@ def create_availability_panel(data: Dict) -> dmc.Card:
                 figure=create_availability_timeline(
                     data.get("availabilitySegments", [])
                 ),
-                config={"displayModeBar": False},
+                config={
+                    "displayModeBar": False,
+                    "staticPlot": False,
+                    "doubleClick": False,
+                },
             ),
         ],
         withBorder=True,

@@ -106,8 +106,13 @@ feat(...): ...
 | 5 | 가용성 분석 | `ugv_mon/analysis/availability.py` |
 | 6 | 지터/손실 | `ugv_mon/analysis/jitter.py`, `loss.py` |
 | 7 | UI 연동 | `ugv_mon/data/live_data.py` |
-| 8 | 차트 구현 | `ugv_mon/layouts/charts.py` (수정) |
-| 9 | 로그 테이블 | `ugv_mon/components/log_table.py` (수정) |
+| 8 | 차트 구현 | `ugv_mon/layouts/charts.py` |
+|   | - 통신 품질 차트: 시간 범위 선택, 범례, 실시간 값 | `ugv_mon/layouts/main_layout.py` |
+|   | - 가용성 타임라인: 세그먼트 유지 로직 개선 | `ugv_mon/data/mock_data.py` |
+|   | - 장치 연결 상태: Tooltip 기능 추가 | `ugv_mon/components/device_grid.py` |
+| 9 | 로그 테이블 | `ugv_mon/components/log_table.py` |
+|   | - Time 포맷: HH:MM:SS (밀리초 제거) | `ugv_mon/data/models.py` |
+|   | - Auto-scroll 기능 제거 | `ugv_mon/app.py`, `ugv_mon/callbacks/update_callbacks.py` |
 | 10 | 통합 테스트 | `tests/` 디렉토리 |
 
 ---

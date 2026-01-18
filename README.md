@@ -115,11 +115,23 @@ UGV_MON_POLL_INTERVAL=1000 python run.py
 
 ### Charts
 - **통신 품질 차트**: PPS and jitter time series with P95/P99 reference lines
+  - 시간 범위 선택 (30초, 1분, 5분)
+  - 범례 표시 (PPS 좌, 지터 우)
+  - 하단 실시간 값 표시 (PPS, 지터)
+  - X축 시간 레이블 최적화
 - **가용성 타임라인**: Up/down segments over 1-hour window
+  - 세그먼트 전체 영역에서 hover 정보 표시
+  - 마지막 세그먼트가 타임윈도우 끝까지 유지
+
+### Status Panels
+- **장치 연결 상태**: 10-device connectivity grid
+  - 경고/오류 상태 시 hover tooltip으로 원인 표시 (HTML title 속성)
+  - 모든 박스 크기 동일 유지
 
 ### Log Table
 - Real-time packet log with sequence numbers, parse status, and anomaly notes
-- Controls: Auto-scroll, Pause, Clear
+- Time 포맷: HH:MM:SS (밀리초 제거)
+- Controls: Pause, Clear
 
 ## ⚙️ Architecture
 

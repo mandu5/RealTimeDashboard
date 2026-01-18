@@ -54,12 +54,14 @@ class DeviceStatus:
         connected: Whether device is reporting as connected
         warning: Whether device has a warning condition
         last_seen: Timestamp of last status update
+        error_reason: Reason for error/warning status (shown in tooltip)
     """
     device_id: str
     name: str
     connected: bool = True
     warning: bool = False
     last_seen: Optional[datetime] = None
+    error_reason: Optional[str] = None
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for Dash component props."""
@@ -68,6 +70,7 @@ class DeviceStatus:
             "name": self.name,
             "connected": self.connected,
             "warning": self.warning,
+            "error_reason": self.error_reason,
         }
 
 
@@ -100,7 +103,7 @@ class LogEntry:
     def to_dict(self) -> Dict:
         """Convert to dictionary for AG-Grid row data."""
         return {
-            "time": self.timestamp.strftime("%H:%M:%S.%f")[:-3],  # HH:MM:SS.mmm
+            "time": self.timestamp.strftime("%H:%M:%S"),  # HH:MM:SS
             "seq": self.sequence,
             "msg_code": self.msg_code,
             "parse_ok": "✓" if self.parse_ok else "✗",

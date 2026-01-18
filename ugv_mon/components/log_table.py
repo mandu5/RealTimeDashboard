@@ -150,6 +150,7 @@ def create_log_table(
             "pagination": False,
             "domLayout": "normal",
             "suppressCellFocus": True,
+            "suppressScrollOnNewData": False,  # Allow scrolling on data update
             "getRowStyle": {
                 "styleConditions": [
                     {
@@ -214,13 +215,6 @@ def create_log_table_header(log_count: int) -> html.Div:
             # Control buttons
             html.Div(
                 children=[
-                    dmc.Button(
-                        "Auto-scroll",
-                        id="auto-scroll-btn",
-                        variant="outline",
-                        size="xs",
-                        color="blue",
-                    ),
                     dmc.Button(
                         "Pause",
                         id="pause-btn",

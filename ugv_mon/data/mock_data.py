@@ -94,10 +94,10 @@ class MockDataGenerator:
             DeviceStatus("adc", "ADC", connected=True),
             DeviceStatus("fcam", "FCAM", connected=True),
             DeviceStatus("rcam", "RCAM", connected=True),
-            DeviceStatus("aux", "AUX", connected=True, warning=True),
+            DeviceStatus("aux", "AUX", connected=True, warning=True, error_reason="응답 지연 감지 (250ms 이상)"),
             DeviceStatus("scs", "SCS", connected=True),
             DeviceStatus("dip", "DIP", connected=True),
-            DeviceStatus("tcc", "TCC", connected=False),
+            DeviceStatus("tcc", "TCC", connected=False, error_reason="연결 타임아웃 (10초 이상 패킷 수신 없음)"),
             DeviceStatus("tm", "TM", connected=True),
         ]
         
@@ -194,6 +194,8 @@ class MockDataGenerator:
         Update availability timeline with current connection state.
         
         Manages segment creation and pruning to keep timeline bounded.
+        The last segment always extends to time_window end to ensure
+        the bar is always visible up to the end of the timeline.
         
         Args:
             is_connected: Current connection status
@@ -201,8 +203,10 @@ class MockDataGenerator:
         time_window = config.ui.timeline_duration_sec
         
         if not self._availability_segments:
+            # Initialize with first segment extending to time_window
+            end_time = min(self._elapsed_time, time_window)
             self._availability_segments.append(
-                AvailabilitySegment(0, self._elapsed_time, is_connected)
+                AvailabilitySegment(0, time_window, is_connected)
             )
             return
         
@@ -211,29 +215,60 @@ class MockDataGenerator:
         # Extend or create new segment based on state change
         if (is_connected and last_seg.is_up) or (not is_connected and not last_seg.is_up):
             # Same state - extend current segment
-            last_seg.end_sec = min(self._elapsed_time, time_window)
+            # Always extend to time_window to ensure visibility
+            last_seg.end_sec = time_window
         else:
             # State changed - create new segment
+            # New segment starts from where previous one ended
             self._availability_segments.append(
                 AvailabilitySegment(
                     start_sec=last_seg.end_sec,
-                    end_sec=min(self._elapsed_time, time_window),
+                    end_sec=time_window,  # Always extend to time_window
                     is_up=is_connected,
                 )
             )
         
-        # Prune old segments beyond time window
+        # Prune old segments beyond time window (only if elapsed_time exceeds time_window)
         if self._elapsed_time > time_window:
             offset = self._elapsed_time - time_window
-            self._availability_segments = [
-                AvailabilitySegment(
-                    start_sec=max(0, seg.start_sec - offset),
-                    end_sec=max(0, seg.end_sec - offset),
-                    is_up=seg.is_up,
-                )
-                for seg in self._availability_segments
-                if seg.end_sec > offset
-            ]
+            pruned_segments = []
+            
+            for seg in self._availability_segments:
+                # Adjust segment times relative to new window start
+                new_start = max(0, seg.start_sec - offset)
+                new_end = max(0, seg.end_sec - offset)
+                
+                # Only keep segments that are still within or partially within the window
+                # Segments that start before 0 but end after 0 are kept and clipped
+                if new_end > 0:
+                    # Clip start to 0 if segment extends before window start
+                    new_start = max(0, new_start)
+                    pruned_segments.append(
+                        AvailabilitySegment(
+                            start_sec=new_start,
+                            end_sec=new_end,
+                            is_up=seg.is_up,
+                        )
+                    )
+            
+            # Ensure last segment always extends to time_window end
+            # This is critical for visual continuity
+            if pruned_segments:
+                pruned_segments[-1].end_sec = time_window
+                # Ensure last segment has valid start
+                if pruned_segments[-1].start_sec >= time_window:
+                    if len(pruned_segments) > 1:
+                        prev_end = pruned_segments[-2].end_sec
+                        pruned_segments[-1].start_sec = prev_end
+                    else:
+                        pruned_segments[-1].start_sec = max(0, time_window - 1)
+            
+            self._availability_segments = pruned_segments
+        else:
+            # When elapsed_time < time_window, ensure last segment extends to time_window
+            # This ensures the bar is always visible to the end of the timeline
+            if self._availability_segments:
+                self._availability_segments[-1].end_sec = time_window
     
     def get_logs(self, limit: int = 50) -> List[Dict]:
         """

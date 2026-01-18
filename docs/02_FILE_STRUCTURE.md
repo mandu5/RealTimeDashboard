@@ -4,7 +4,7 @@
 
 ## 디렉토리 구조
 
-```
+```현재까지 모든 변경사항들에 대해서 docs폴더 내에 md파일들 정보 전부 최신화 진행해봐.
 opus1/
 ├── run.py                      # 앱 실행
 ├── requirements.txt            # 의존성 목록
@@ -134,12 +134,17 @@ opus1/
 - **사용 위치**: 장치 연결 상태 패널
 - **함수**: `create_device_grid(devices)`
 - **장치**: VIC, RDC, ADC, FCAM, RCAM, AUX, SCS, DIP, TCC, TM (10개)
+- **기능**:
+  - 연결 상태에 따른 색상 표시 (초록: 정상, 노랑: 경고, 빨강: 오류)
+  - 경고/오류 상태일 때 HTML `title` 속성으로 원인 표시 (hover tooltip)
+  - 모든 박스 크기 동일 유지 (Grid 레이아웃)
 
 #### `log_table.py`
 - **역할**: AG-Grid 로그 테이블
 - **사용 위치**: 하단 로그/이벤트 영역
 - **컬럼**: Time, Seq, Msg Code, Parse, Checksum, Mode, Authority, Notes
 - **기능**: 정렬, 필터링, 조건부 스타일링
+- **포맷**: Time 컬럼은 `HH:MM:SS` 형식 (밀리초 제거)
 
 ---
 
@@ -149,7 +154,10 @@ opus1/
 - **역할**: 전체 대시보드 조합
 - **구성 요소**:
   - `dcc.Store`: 상태 저장소
-  - `dcc.Interval`: 폴링 주기
+    - `dashboard-data`: 대시보드 데이터
+    - `is-paused`: 일시정지 상태
+    - `chart-time-range`: 차트 시간 범위 (기본값: 60초)
+  - `dcc.Interval`: 폴링 주기 (2초)
   - 헤더 바, KPI 카드 행, 메인 콘텐츠, 로그 테이블
 
 #### `header.py`
@@ -167,7 +175,15 @@ opus1/
 - **역할**: Plotly 차트
 - **차트**:
   - `create_communication_chart()`: PPS + 지터 (스택)
+    - 시간 범위 선택 기능 (30초, 1분, 5분)
+    - 범례 표시 (PPS 좌, 지터 우)
+    - 하단 실시간 값 표시 (PPS, 지터)
+    - X축 시간 레이블 최적화 (겹치지 않도록 동적 조정)
+    - 시간 범위에 따른 데이터 필터링
   - `create_availability_timeline()`: 가용성 타임라인
+    - Up/Down 세그먼트 시각화
+    - 마지막 세그먼트가 타임윈도우 끝까지 유지
+    - 세그먼트 전체 영역에서 hover 정보 표시
 
 ---
 
@@ -175,10 +191,15 @@ opus1/
 
 #### `update_callbacks.py`
 - **역할**: 모든 대시보드 상호작용 처리
-- **콜백 3종류**:
+- **콜백**:
   1. `update_dashboard_data`: 2초마다 데이터 갱신
   2. `update_all_components`: 데이터 변경 시 UI 갱신
-  3. 컨트롤 콜백: Pause/Resume, Auto-scroll, Clear
+     - 시간 범위 변경 감지 및 차트 업데이트
+     - 실시간 PPS/지터 값 표시 업데이트
+  3. 컨트롤 콜백:
+     - Pause/Resume 버튼
+     - Clear 버튼
+  4. 시간 범위 선택 콜백: 30초/1분/5분 버튼 클릭 처리
 
 ---
 
@@ -189,6 +210,9 @@ opus1/
 - **핵심 클래스**:
   - `OperationMode`, `Authority`, `DrivingState` (Enum)
   - `DashboardState`, `LogEntry`, `DeviceStatus` (dataclass)
+- **최신 변경사항**:
+  - `DeviceStatus`: `error_reason` 필드 추가 (tooltip 메시지)
+  - `LogEntry.to_dict()`: Time 포맷을 `HH:MM:SS`로 변경 (밀리초 제거)
 
 #### `mock_data.py`
 - **역할**: 목 데이터 생성기 (Day 2-3에서 실제 캡처로 대체)

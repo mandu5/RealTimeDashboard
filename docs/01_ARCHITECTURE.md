@@ -111,11 +111,14 @@
     "drivingState": "전진/대기",
     
     # 컬렉션
-    "devices": [...],           # 10개 장치 상태
+    "devices": [...],           # 10개 장치 상태 (error_reason 포함)
     "emergencyStatus": {...},   # 10개 비상정지 원인
     "combinedData": [...],      # 60개 차트 데이터 포인트
     "availabilitySegments": [...]  # 가용성 타임라인 세그먼트
 }
+
+# 추가 Store
+- "chart-time-range": 시간 범위 선택 (30, 60, 300초)
 ```
 
 ---
