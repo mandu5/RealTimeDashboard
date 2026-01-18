@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  ugv-mon-dashboard:
+    build: .
+    container_name: ugv-mon-dash
+    ports:
+      - "8050:8050"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEBUG=True
+    volumes:
+      - ./data:/app/data  # 데이터 영속성을 위한 볼륨 (선택사항)
+    restart: unless-stopped
+    networks:
+      - ugv-network
+
+networks:
+  ugv-network:
+    driver: bridge
