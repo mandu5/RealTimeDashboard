@@ -38,14 +38,14 @@ def main():
     """Run the UGV-MON dashboard server."""
     print(f"""
 ╔══════════════════════════════════════════════════════════════════╗
-║                    UGV-MON Dashboard v{config.app.version}                      ║
+║                    UGV-MON Dashboard v{config.app.version}       ║
 ║              VIC↔OCS Real-time Communication Monitor             ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  Server: http://{config.app.host}:{config.app.port}                              ║
-║  Interface: {config.network.interface:<6}                                        ║
-║  Filter: {config.network.source_port}→{config.network.dest_port}                                    ║
-║  Poll Interval: {config.ui.poll_interval_ms}ms                                     ║
-║  Debug: {str(config.app.debug):<5}                                             ║
+║  Server: http://{config.app.host}:{config.app.port}              ║
+║  Interface: {config.network.interface:<6}                        ║
+║  Filter: {config.network.source_port}→{config.network.dest_port} ║
+║  Poll Interval: {config.ui.poll_interval_ms}ms                   ║
+║  Debug: {str(config.app.debug):<5}                               ║
 ╚══════════════════════════════════════════════════════════════════╝
     """)
     

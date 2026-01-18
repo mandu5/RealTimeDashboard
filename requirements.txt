@@ -1,3 +1,5 @@
+# 의존성
+
 # UGV-MON Dashboard - Python Dependencies
 # VIC↔OCS Real-time Communication Monitoring & Analysis
 # Version 1.0.0
