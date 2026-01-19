@@ -120,7 +120,7 @@ class DeviceConfig:
         {"id": "adc", "name": "ADC", "bit": 2},
         {"id": "fcam", "name": "FCAM", "bit": 3},
         {"id": "rcam", "name": "RCAM", "bit": 4},
-        {"id": "aux", "name": "AUX", "bit": 5},
+        {"id": "acam", "name": "ACAM", "bit": 5},
         {"id": "scs", "name": "SCS", "bit": 6},
         {"id": "dip", "name": "DIP", "bit": 7},
         {"id": "tcc", "name": "TCC", "bit": 8},

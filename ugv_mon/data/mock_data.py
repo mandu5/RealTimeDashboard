@@ -94,7 +94,7 @@ class MockDataGenerator:
             DeviceStatus("adc", "ADC", connected=True),
             DeviceStatus("fcam", "FCAM", connected=True),
             DeviceStatus("rcam", "RCAM", connected=True),
-            DeviceStatus("aux", "AUX", connected=True, warning=True, error_reason="응답 지연 감지 (250ms 이상)"),
+            DeviceStatus("acam", "ACAM", connected=True, warning=True, error_reason="응답 지연 감지 (250ms 이상)"),
             DeviceStatus("scs", "SCS", connected=True),
             DeviceStatus("dip", "DIP", connected=True),
             DeviceStatus("tcc", "TCC", connected=False, error_reason="연결 타임아웃 (10초 이상 패킷 수신 없음)"),

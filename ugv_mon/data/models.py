@@ -38,7 +38,7 @@ class Authority(Enum):
 class DrivingState(Enum):
     """VIC driving state (bits 1..0 of state byte)."""
     REMOTE = 0b01
-    PLATOON = 0b10
+    PLATOONING = 0b10
     AUTONOMOUS_DISPATCH = 0b11
     UNKNOWN = 0xFF
 

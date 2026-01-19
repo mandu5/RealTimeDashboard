@@ -33,19 +33,12 @@ def create_app() -> dash.Dash:
         >>> app = create_app()
         >>> app.run_server(debug=True)
     """
-    # Create Dash app
+    # Create Dash app (no external stylesheets - internal network only)
     app = dash.Dash(
         __name__,
         suppress_callback_exceptions=True,
-        external_stylesheets=[
-            # Inter font from Google Fonts
-            "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
-        ],
         title=config.app.name,
     )
-    
-    # Expose server for WSGI deployment
-    server = app.server
     
     # Initialize data generator and get initial data
     data_gen = get_data_generator()
@@ -63,4 +56,3 @@ def create_app() -> dash.Dash:
 
 # Module-level app instance for imports
 app = create_app()
-server = app.server

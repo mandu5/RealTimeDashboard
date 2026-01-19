@@ -294,7 +294,7 @@ def create_device_panel(devices: List[Dict]) -> dmc.Card:
     Returns:
         Mantine Card component
     """
-    from ..components.device_grid import create_device_grid, get_device_summary
+    from ..components.device_grid import create_device_grid
     
     connected_count = sum(1 for d in devices if d.get("connected", False))
     total_count = len(devices)
