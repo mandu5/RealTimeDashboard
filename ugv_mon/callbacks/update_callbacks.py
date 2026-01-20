@@ -1,24 +1,31 @@
 """
 Dash Callbacks for UGV-MON Dashboard.
 
-Handles all dashboard interactivity:
-- Polling data updates via dcc.Interval
-- UI state management (pause, clear)
-- Component updates based on data changes
+=============================================================================
+대시보드의 모든 상호작용을 처리합니다:
+- dcc.Interval을 통한 데이터 폴링
+- UI 상태 관리 (일시정지, 초기화)
+- 데이터 변경에 따른 컴포넌트 업데이트
 
-Callback Design:
-- Uses dcc.Store for state management
-- Single data update callback triggers component updates
-- Separate callbacks for control buttons to avoid circular dependencies
+콜백 설계:
+- dcc.Store로 상태 관리
+- 단일 데이터 업데이트 콜백이 컴포넌트 업데이트를 트리거
+- 제어 버튼은 별도 콜백으로 순환 의존성 방지
+
+데이터 소스 전환:
+- 환경변수 UGV_MON_USE_LIVE=true: 실시간 캡처 모드
+- 기본값: Mock 데이터 모드 (개발/테스트용)
+=============================================================================
 """
 
+import logging
 from dash import Input, Output, State, callback, callback_context
 from dash.exceptions import PreventUpdate
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
-from ..data.mock_data import MockDataGenerator
-from ..components.status_chip import create_status_chip
+from ..data.live_provider import get_data_provider
 from ..components.kpi_card import create_kpi_cards_row
+from ..layouts.header import create_status_chips
 from ..components.device_grid import create_device_grid
 from ..layouts.panels import (
     create_operational_status_boxes,
@@ -29,20 +36,30 @@ from ..layouts.charts import (
     create_availability_timeline,
 )
 
+# 로거 설정
+logger = logging.getLogger(__name__)
 
-# Global data generator instance
-# In production, this will be replaced with actual capture module
-_data_gen = MockDataGenerator()
+# =============================================================================
+# 전역 데이터 제공자 인스턴스
+# - get_data_provider()가 환경변수에 따라 Live 또는 Mock 반환
+# - Live 모드: UGV_MON_USE_LIVE=true
+# - Mock 모드: 기본값 (개발/테스트용)
+# =============================================================================
+_data_provider = get_data_provider()
 
 
-def get_data_generator() -> MockDataGenerator:
+def get_data_generator():
     """
-    Get the global data generator instance.
+    전역 데이터 제공자 인스턴스 반환.
     
     Returns:
-        MockDataGenerator instance
+        MockDataGenerator 또는 LiveDataProvider 인스턴스
+    
+    Note:
+        하위 호환성을 위해 함수 이름 유지 (get_data_generator)
+        실제로는 get_data_provider와 동일한 역할
     """
-    return _data_gen
+    return _data_provider
 
 
 def register_callbacks(app) -> None:
@@ -92,7 +109,7 @@ def _register_data_update_callback(app) -> None:
         if is_paused:
             raise PreventUpdate
         
-        return _data_gen.update_data(current_data)
+        return _data_provider.update_data(current_data)
 
 
 def _register_component_update_callback(app) -> None:
@@ -133,18 +150,8 @@ def _register_component_update_callback(app) -> None:
         Returns:
             Tuple of updated component children/props
         """
-        # Status chips (with fixed min-widths to prevent layout shift)
-        status_chips = [
-            create_status_chip(
-                "연결상태",
-                "연결됨" if data.get("connected") else "연결끊김",
-                "success" if data.get("connected") else "destructive",
-                min_width="100px",
-            ),
-            create_status_chip("인터페이스", data.get("interface", "---"), min_width="100px"),
-            create_status_chip("필터", data.get("filter", "---"), min_width="100px"),
-            create_status_chip("마지막 패킷", data.get("lastPacketTime", "---"), "info", min_width="140px"),
-        ]
+        # Status chips - 재사용 가능한 헬퍼 함수 사용
+        status_chips = create_status_chips(data)
         
         # KPI cards
         kpi_cards = create_kpi_cards_row(data)
@@ -173,8 +180,8 @@ def _register_component_update_callback(app) -> None:
         )
         
         # Log table data
-        log_data = _data_gen.get_logs(limit=50)
-        log_title = f"로그/이벤트 테이블 (최근 {_data_gen.log_count}개)"
+        log_data = _data_provider.get_logs(limit=50)
+        log_title = f"로그/이벤트 테이블 (최근 {_data_provider.log_count}개)"
         
         # Current PPS and Jitter values for display
         chart_data = data.get("combinedData", [])
@@ -263,5 +270,5 @@ def _register_control_callbacks(app) -> None:
     )
     def clear_logs(n_clicks: int, current_data: Dict) -> Dict:
         """Clear all log entries."""
-        _data_gen.clear_logs()
+        _data_provider.clear_logs()
         return current_data

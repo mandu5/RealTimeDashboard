@@ -134,17 +134,7 @@ def create_device_grid(devices: List[Dict]) -> html.Div:
     )
 
 
-def get_device_summary(devices: List[Dict]) -> str:
-    """
-    Generate device summary text.
-    
-    Args:
-        devices: List of device dictionaries
-        
-    Returns:
-        Summary string like "전체: 9/10 개, 정상: 1s"
-    """
-    total = len(devices)
-    connected = sum(1 for d in devices if d.get("connected", False))
-    
-    return f"전체: {connected}/{total} 개"
+# =============================================================================
+# 미사용 함수 삭제 (2026-01-20)
+# - get_device_summary(): panels.py에서 직접 계산하므로 미사용
+# =============================================================================

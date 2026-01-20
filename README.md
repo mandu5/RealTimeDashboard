@@ -18,29 +18,30 @@ UGV-MON provides real-time visibility into VIC (Vehicle Interface Controller) an
 ## 📁 Project Structure
 
 ```
-/workspace/
+opus1/
 ├── ugv_mon/                    # Main Python package
-│   ├── __init__.py
 │   ├── app.py                  # Dash application factory
 │   ├── config.py               # Configuration management
-│   ├── components/             # Reusable UI components
-│   │   ├── status_chip.py      # Status indicator chips
-│   │   ├── kpi_card.py         # KPI metric cards
-│   │   ├── device_grid.py      # Device connectivity grid
-│   │   └── log_table.py        # AG-Grid event table
-│   ├── layouts/                # Dashboard layouts
-│   │   ├── main_layout.py      # Complete dashboard composition
-│   │   ├── header.py           # Header bar component
-│   │   ├── panels.py           # Status panels
-│   │   └── charts.py           # Plotly charts
-│   ├── callbacks/              # Dash callbacks
-│   │   └── update_callbacks.py # Polling and UI updates
-│   ├── data/                   # Data models
-│   │   ├── models.py           # Type definitions
-│   │   └── mock_data.py        # Mock data generator
-│   └── utils/                  # Utilities
-│       └── helpers.py          # Helper functions
+│   ├── capture/                # 패킷 캡처 모듈
+│   │   ├── sniffer.py          # Scapy 기반 PacketSniffer
+│   │   ├── queue.py            # 스레드 안전 PacketQueue
+│   │   └── stats.py            # 캡처 통계 CaptureStats
+│   ├── parser/                 # ICD 파싱 모듈
+│   │   ├── models.py           # ICDHeader, StatusPayload, ParseResult
+│   │   └── icd_parser.py       # 메인 파서 클래스
+│   ├── analysis/               # 통계 분석 모듈
+│   │   ├── stats_calculator.py # 지터, PPS, 가용성 계산
+│   │   └── anomaly_detector.py # 이상 탐지
+│   ├── data/                   # 데이터 모델 및 제공자
+│   │   ├── models.py           # 타입 정의 (Enum, dataclass)
+│   │   ├── mock_data.py        # Mock 데이터 생성기
+│   │   └── live_provider.py    # 실시간 데이터 제공자
+│   ├── components/             # UI 컴포넌트
+│   ├── layouts/                # 레이아웃
+│   ├── callbacks/              # Dash 콜백
+│   └── utils/                  # 유틸리티
 ├── run.py                      # Entry point
+├── start.sh                    # 실행 스크립트 (Mock/Live 전환)
 ├── requirements.txt            # Python dependencies
 └── README.md                   # This file
 ```
@@ -49,44 +50,99 @@ UGV-MON provides real-time visibility into VIC (Vehicle Interface Controller) an
 
 ### Prerequisites
 
-- Python 3.10.12 or later
+- Python 3.10.12 or later (Linux에서는 `python3` 명령 사용)
 - pip (Python package manager)
 
 ### Installation
 
 ```bash
 # Create virtual environment (recommended)
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### Running the Dashboard
+---
+
+## 🔄 실행 모드 (Mock / Live)
+
+### 간편 실행 스크립트 사용
 
 ```bash
-python run.py
+# Mock 모드 (가짜 데이터)
+./start.sh mock
+
+# Live 모드 - 루프백 (lo)
+./start.sh live
+
+# Live 모드 - 물리 인터페이스
+./start.sh eno2
+./start.sh eno3
 ```
 
-Open your browser to: **http://localhost:8050**
+### 직접 실행
 
-### Environment Configuration
+#### 1. Mock 모드 (기본값, UI 테스트용)
 
 ```bash
-# Custom port
-UGV_MON_PORT=8080 python run.py
-
-# Production mode (no debug)
-UGV_MON_DEBUG=false python run.py
-
-# Change network interface
-UGV_MON_INTERFACE=eno2 python run.py
-
-# Faster polling (1 second)
-UGV_MON_POLL_INTERVAL=1000 python run.py
+python3 run.py
 ```
+
+- **데이터 소스**: MockDataGenerator (랜덤 가짜 데이터)
+- **권한**: 불필요
+- **용도**: UI 개발/테스트
+
+#### 2. Live 모드 - Local (lo 인터페이스)
+
+```bash
+export UGV_MON_USE_LIVE=true
+export UGV_MON_INTERFACE=lo
+sudo -E python3 run.py
+```
+
+- **데이터 소스**: 실제 네트워크 패킷
+- **권한**: root 필요
+- **용도**: VIC↔OCS 시뮬레이터 테스트
+
+#### 3. Live 모드 - 실장비 (eno2 또는 eno3)
+
+```bash
+export UGV_MON_USE_LIVE=true
+export UGV_MON_INTERFACE=eno2    # 또는 eno3
+sudo -E python3 run.py
+```
+
+- **데이터 소스**: 실제 VIC↔OCS 패킷
+- **권한**: root 필요
+- **용도**: 실제 장비 모니터링
+
+### 권한 설정 (sudo 없이 실행)
+
+```bash
+# 한 번만 설정
+sudo setcap cap_net_raw+ep $(which python3)
+
+# 이후 sudo 없이 실행 가능
+export UGV_MON_USE_LIVE=true
+export UGV_MON_INTERFACE=lo
+python3 run.py
+```
+
+---
+
+## 환경변수 요약
+
+| 변수명 | 설명 | 기본값 |
+|--------|------|--------|
+| `UGV_MON_USE_LIVE` | `true`면 Live 모드 | (Mock 모드) |
+| `UGV_MON_INTERFACE` | 캡처 인터페이스 | `lo` |
+| `UGV_MON_PORT` | 서버 포트 | `8050` |
+| `UGV_MON_POLL_INTERVAL` | 폴링 간격 (ms) | `2000` |
+| `UGV_MON_DEBUG` | 디버그 모드 | `true` |
+
+---
 
 ## 🖥️ Dashboard Overview
 
@@ -118,51 +174,14 @@ UGV_MON_POLL_INTERVAL=1000 python run.py
   - 시간 범위 선택 (30초, 1분, 5분)
   - 범례 표시 (PPS 좌, 지터 우)
   - 하단 실시간 값 표시 (PPS, 지터)
-  - X축 시간 레이블 최적화
 - **가용성 타임라인**: Up/down segments over 1-hour window
-  - 세그먼트 전체 영역에서 hover 정보 표시
-  - 마지막 세그먼트가 타임윈도우 끝까지 유지
-
-### Status Panels
-- **장치 연결 상태**: 10-device connectivity grid
-  - 경고/오류 상태 시 hover tooltip으로 원인 표시 (HTML title 속성)
-  - 모든 박스 크기 동일 유지
 
 ### Log Table
 - Real-time packet log with sequence numbers, parse status, and anomaly notes
-- Time 포맷: HH:MM:SS (밀리초 제거)
+- Time 포맷: HH:MM:SS
 - Controls: Pause, Clear
 
-## ⚙️ Architecture
-
-### CSC Structure (Per Mentor Requirements)
-
-```
-CSCI: UGV-MON
-├── CSC-001: Data Acquisition (데이터 수집)
-│   ├── CSU: 실시간 데이터 수집
-│   └── CSU: 데이터 필터링
-├── CSC-002: Data Processing/Analysis (데이터 처리/분석)
-│   ├── CSU: ICD 파싱
-│   ├── CSU: 데이터 품질 분석
-│   └── CSU: 운용 데이터 분석
-└── CSC-003: Data Presentation (데이터 전시)
-    ├── CSU: 상태 전시
-    ├── CSU: 로그/이벤트 전시
-    └── CSU: 성능 지표 전시
-```
-
-### Polling Approach (vs. SocketIO Push)
-
-This dashboard uses **dcc.Interval** polling (2-second default) instead of SocketIO push for several reasons:
-
-1. **Simplicity**: Polling is straightforward to implement and debug
-2. **Reliability**: No WebSocket connection management complexity
-3. **Sufficient for Use Case**: 2-second updates are adequate for monitoring
-4. **Resource Efficiency**: Bounded update frequency prevents overload
-5. **Development Speed**: Faster to implement within internship timeline
-
-SocketIO push remains an option for future enhancement if sub-second latency is required.
+---
 
 ## 📋 ICD v1.0 Parsing Overview
 
@@ -181,20 +200,54 @@ SocketIO push remains an option for future enhancement if sub-second latency is 
 
 1. **Device Presence** (uint16, bits 9..0):
    - Bit 9: TM, Bit 8: TCC, Bit 7: DIP, Bit 6: SCS
-   - Bit 5: AUX, Bit 4: RCAM, Bit 3: FCAM
+   - Bit 5: ACAM, Bit 4: RCAM, Bit 3: FCAM
    - Bit 2: ADC, Bit 1: RDC, Bit 0: VIC
 
 2. **VIC State Byte** (uint8):
    - Bits 7..5: Operation mode (prep/transition/unmanned driving/firing/emergency)
    - Bits 3..2: Authority (released/OCS/near controller)
-   - Bits 1..0: Driving state (remote/platoon/autonomous)
+   - Bits 1..0: Driving state (remote/platooning/autonomous)
 
 3. **Emergency Sources** (uint16, bits 15..6):
    - 10 possible emergency stop causes
 
-## 🧪 Testing with Simulator
+---
 
-### Setup
+## 🧪 Testing
+
+### 모듈별 테스트
+
+#### 1. Capture 모듈 테스트
+```bash
+sudo python3 -c "
+from ugv_mon.capture import PacketSniffer
+import time
+
+def callback(data):
+    print(f'Received: {len(data)} bytes')
+
+sniffer = PacketSniffer('lo', 50000, 61000, callback)
+sniffer.start()
+time.sleep(10)
+sniffer.stop()
+print(f'Total: {sniffer.get_stats().packets_total}')
+"
+```
+
+#### 2. ICD 파싱 통합 테스트
+```bash
+sudo python3 test_icd_parsing.py
+```
+
+#### 3. Live 모드 통합 테스트
+```bash
+export UGV_MON_USE_LIVE=true
+export UGV_MON_INTERFACE=lo
+sudo -E python3 test_live_mode.py
+```
+
+### 전체 대시보드 테스트
+
 ```bash
 # Terminal 1: Start VCS Simulator
 sudo ./VCS_Simulator -L
@@ -202,8 +255,8 @@ sudo ./VCS_Simulator -L
 # Terminal 2: Start VCS Application
 sudo ./VCS_Application
 
-# Terminal 3: Run Dashboard
-python run.py
+# Terminal 3: Run Dashboard (Live mode)
+./start.sh live
 ```
 
 ### Wireshark Verification
@@ -211,38 +264,27 @@ python run.py
 - Filter: `udp.srcport == 50000 && udp.dstport == 61000`
 - Expected: 143-byte packets (101 bytes application data)
 
-### Test Scenarios
-1. **Normal Operation**: Verify PPS ~1000, parse success 100%
-2. **Stop Simulator**: Check availability drops, connection indicator changes
-3. **Emergency State**: Toggle simulator buttons, verify emergency indicators
+### 테스트 가이드
+자세한 테스트 방법은 [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md)를 참고하세요.
+
+---
 
 ## 📅 Development Timeline
 
-| Day | Focus | Deliverables |
-|-----|-------|--------------|
-| 1 | UI Skeleton | Dash layout with DMC, AG-Grid setup ✅ |
-| 2 | Scapy Capture | Real-time packet capture module |
-| 3 | ICD Parsing | Header/payload parsing, checksum verification |
-| 4 | Quality Metrics | Parse success, checksum fail, log entries |
-| 5 | Availability | Uptime calculation, timeline segments |
-| 6 | Jitter/Loss | P95/P99 jitter, seq-gap loss estimate |
-| 7 | UI Integration | Connect live data to all components |
-| 8 | Charts | PPS, jitter, availability visualizations |
-| 9 | Polish | AG-Grid finalization, UI refinement |
-| 10 | Hardening | Integration tests, demo preparation |
+| Day | Focus | Status |
+|-----|-------|--------|
+| 1 | UI Skeleton | ✅ 완료 |
+| 2 | Scapy Capture | ✅ 완료 |
+| 3 | ICD Parsing | ✅ 완료 |
+| 4 | Live Provider | ✅ 완료 |
+| 5 | Stats Analysis | ✅ 완료 |
+| 6 | UI Integration | ✅ 완료 |
+| 7 | Stabilization | 문서 완료 |
+| 8 | Charts | ✅ 완료 |
+| 9 | Polish | ✅ 완료 |
+| 10 | Hardening | 문서 완료 |
 
-## 📝 Suggested Commit Message (Day 1)
-
-```
-feat(ui): bootstrap dash layout with DMC and log grid skeleton
-
-- Create modular ugv_mon package structure
-- Implement reusable UI components (StatusChip, KpiCard, DeviceGrid)
-- Set up dash-ag-grid for log/event table
-- Configure DMC-based dashboard layout
-- Add mock data generator for UI development
-- Implement polling callbacks with dcc.Interval
-```
+---
 
 ## 📄 License
 
