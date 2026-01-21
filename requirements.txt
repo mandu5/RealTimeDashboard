@@ -1,35 +1,12 @@
-# 의존성
+# UGV-MON Dashboard Dependencies
 
-# UGV-MON Dashboard - Python Dependencies
-# VIC↔OCS Real-time Communication Monitoring & Analysis
-# Version 1.0.0
-
-# =============================================================================
 # Core Dash Framework
-# =============================================================================
 dash==2.14.2
 dash-mantine-components==0.12.1
 dash-ag-grid==31.0.1
 
-# =============================================================================
-# Data Visualization
-# =============================================================================
+# Visualization
 plotly==5.18.0
 
-# =============================================================================
-# Packet Capture (Scapy)
-# Note: Requires libpcap/pcap for packet capture
-#       Install: sudo apt-get install libpcap-dev (Ubuntu/Debian)
-#       Permission: sudo setcap cap_net_raw+ep $(which python3)
-# =============================================================================
+# Packet Capture (requires libpcap: apt-get install libpcap-dev)
 scapy==2.5.0
-
-# =============================================================================
-# Web Server (Production)
-# =============================================================================
-# gunicorn==21.2.0  # For Linux production deployment
-# waitress==2.1.2   # For Windows production deployment
-
-# =============================================================================
-# Note: pandas, numpy, python-dateutil removed - not used in current codebase
-# =============================================================================
