@@ -15,10 +15,15 @@ class PacketQueue:
         self._queue: deque = deque(maxlen=max_size)
         self._lock = threading.Lock()
         self._last_put_time: Optional[datetime] = None
+        self._last_packet: Optional[bytes] = None  # 중복 체크용
 
     def put(self, packet: bytes) -> None:
         """패킷 추가."""
         with self._lock:
+            if packet == self._last_packet:
+                return
+                
+            self._last_packet = packet
             self._queue.append(packet)
             self._last_put_time = datetime.now()
 
