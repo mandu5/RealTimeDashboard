@@ -4,13 +4,22 @@ ICD v1.0 Parser - 패킷 헤더 및 페이로드 파싱.
 
 import struct
 import logging
-from typing import Dict
+from typing import Dict, TypeVar, Type, Union
+from enum import IntEnum
 
-from .models import ICDHeader, StatusPayload, ParseResult
+from .models import ICDHeader, StatusPayload, ParseResult, MsgCode, AckFlag, DeviceID
 
 logger = logging.getLogger(__name__)
 
+# 헬퍼 함수
+T = TypeVar('T', bound=IntEnum)
 
+def safe_enum(enum_class: Type[T], value: int) -> Union[T, int]:
+   
+    try:
+        return enum_class(value)
+    except ValueError:
+        return value
 class ICDParser:
     """ICD v1.0 패킷 파서."""
 
@@ -115,15 +124,18 @@ class ICDParser:
 
     def _parse_header(self, data: bytes) -> ICDHeader:
         """헤더 파싱 (12 bytes)."""
+        if len(data) < 12:
+            raise ValueError(f"헤더 길이 부족: {len(data)} < 12")
+    
         return ICDHeader(
             timestamp=struct.unpack('<I', data[0:4])[0],
-            sequence=data[3],
-            source_id=data[4],
-            dest_id=data[5],
-            msg_code=data[6],
-            ack_flag=data[7],
+            sequence=data[3],                              # timestamp 마지막 1바이트
+            source_id=safe_enum(DeviceID, data[4]),
+            dest_id=safe_enum(DeviceID, data[5]),
+            msg_code=safe_enum(MsgCode, data[6]),
+            ack_flag=safe_enum(AckFlag, data[7]),
             reserved=struct.unpack('<H', data[8:10])[0],
-            data_length=struct.unpack('<H', data[10:12])[0]
+            data_length=struct.unpack('<H', data[10:12])[0],
         )
 
     def _parse_status_payload(self, payload: bytes) -> StatusPayload:
