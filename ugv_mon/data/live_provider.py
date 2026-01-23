@@ -106,6 +106,76 @@ class LiveDataProvider:
             self._sniffer.stop()
             self._is_connected = False
 
+    def switch_interface(self, new_interface: str) -> bool:
+        """
+        인터페이스 전환.
+        
+        Args:
+            new_interface: 새로운 네트워크 인터페이스 (예: "lo", "eno2", "eno3")
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        with self._lock:
+            if new_interface == self._interface:
+                return True  # 이미 같은 인터페이스
+            
+            logger.info(f"Switching interface from {self._interface} to {new_interface}")
+            
+            # 기존 캡처 중지
+            was_running = self._is_connected
+            if was_running:
+                self.stop_capture()
+            
+            # 새 인터페이스로 설정
+            old_interface = self._interface
+            self._interface = new_interface
+            
+            # 새 인터페이스로 캡처 재시작
+            if was_running:
+                success = self.start_capture()
+                if not success:
+                    # 실패 시 이전 인터페이스로 복구
+                    logger.error(f"Failed to start capture on {new_interface}, reverting to {old_interface}")
+                    self._interface = old_interface
+                    if was_running:
+                        self.start_capture()
+                    return False
+                logger.info(f"Interface switched successfully to {new_interface}")
+                return True
+            else:
+                # 캡처가 실행 중이 아니었으면 설정만 변경
+                logger.info(f"Interface set to {new_interface} (capture not running)")
+                return True
+
+    def toggle_connection(self) -> bool:
+        """
+        연결 상태 토글 (시작/중지).
+        
+        Returns:
+            True if connected, False if disconnected
+        """
+        with self._lock:
+            if self._is_connected:
+                logger.info("Stopping packet capture...")
+                self.stop_capture()
+                return False
+            else:
+                logger.info("Starting packet capture...")
+                success = self.start_capture()
+                return success
+
+    def get_available_interfaces(self) -> List[str]:
+        """
+        사용 가능한 네트워크 인터페이스 목록 반환.
+        
+        Returns:
+            인터페이스 이름 리스트
+        """
+        # 하드코딩된 인터페이스 목록 (실제 환경에 맞게 조정 가능)
+        # 나중에 시스템 명령어로 동적으로 가져올 수도 있음
+        return ["lo", "eno2", "eno3"]
+
     def generate_initial_data(self) -> Dict:
         """초기 데이터 생성."""
         self._current_devices = [

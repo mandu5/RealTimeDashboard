@@ -40,12 +40,11 @@ from ..layouts.charts import (
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# 전역 데이터 제공자 인스턴스
-# - get_data_provider()가 환경변수에 따라 Live 또는 Mock 반환
-# - Live 모드: UGV_MON_USE_LIVE=true
-# - Mock 모드: 기본값 (개발/테스트용)
+# 전역 데이터 제공자 인스턴스 (동적 생성)
+# - register_callbacks() 호출 시 전달받은 data_provider 사용
+# - 모듈 레벨에서 생성하지 않음 (환경변수 리셋 문제 해결)
 # =============================================================================
-_data_provider = get_data_provider()
+_data_provider = None
 
 
 def get_data_generator():
@@ -56,13 +55,16 @@ def get_data_generator():
         MockDataGenerator 또는 LiveDataProvider 인스턴스
     
     Note:
-        하위 호환성을 위해 함수 이름 유지 (get_data_generator)
-        실제로는 get_data_provider와 동일한 역할
+        register_callbacks() 호출 전에는 None일 수 있음
+        register_callbacks() 호출 후에만 사용 가능
     """
+    if _data_provider is None:
+        # 폴백: 환경변수 기반으로 생성 (하위 호환성)
+        return get_data_provider()
     return _data_provider
 
 
-def register_callbacks(app) -> None:
+def register_callbacks(app, data_provider=None) -> None:
     """
     Register all dashboard callbacks with the Dash app.
     
@@ -71,10 +73,20 @@ def register_callbacks(app) -> None:
     
     Args:
         app: Dash application instance
+        data_provider: 데이터 제공자 인스턴스 (None이면 환경변수 기반으로 생성)
     """
+    global _data_provider
+    
+    # 데이터 제공자 설정
+    if data_provider is None:
+        _data_provider = get_data_provider()
+    else:
+        _data_provider = data_provider
+    
     _register_data_update_callback(app)
     _register_component_update_callback(app)
     _register_control_callbacks(app)
+    _register_ui_control_callbacks(app)
 
 
 def _register_data_update_callback(app) -> None:
@@ -272,3 +284,65 @@ def _register_control_callbacks(app) -> None:
         """Clear all log entries."""
         _data_provider.clear_logs()
         return current_data
+
+
+def _register_ui_control_callbacks(app) -> None:
+    """Register UI control callbacks (interface switch, connection toggle)."""
+    
+    @app.callback(
+        Output("dashboard-data", "data", allow_duplicate=True),
+        Input("interface-select", "value"),
+        State("dashboard-data", "data"),
+        prevent_initial_call=True,
+    )
+    def on_interface_change(new_interface: str, current_data: Dict) -> Dict:
+        """인터페이스 변경 처리."""
+        from ..data.live_provider import LiveDataProvider
+        
+        if isinstance(_data_provider, LiveDataProvider):
+            success = _data_provider.switch_interface(new_interface)
+            if success:
+                logger.info(f"Interface switched to: {new_interface}")
+                # 데이터 새로고침
+                return _data_provider.update_data(current_data)
+            else:
+                logger.error(f"Failed to switch interface to: {new_interface}")
+        raise PreventUpdate
+    
+    @app.callback(
+        [
+            Output("dashboard-data", "data", allow_duplicate=True),
+            Output("connection-toggle-btn", "children", allow_duplicate=True),
+            Output("connection-toggle-btn", "variant", allow_duplicate=True),
+            Output("connection-toggle-btn", "color", allow_duplicate=True),
+        ],
+        Input("connection-toggle-btn", "n_clicks"),
+        State("dashboard-data", "data"),
+        prevent_initial_call=True,
+    )
+    def on_connection_toggle(n_clicks: int, current_data: Dict) -> Tuple:
+        """연결 상태 토글 처리."""
+        from dash import html
+        from ..data.live_provider import LiveDataProvider
+        
+        if isinstance(_data_provider, LiveDataProvider):
+            success = _data_provider.toggle_connection()
+            if success:
+                is_connected = _data_provider._is_connected
+                logger.info(f"Connection toggled: {'Connected' if is_connected else 'Disconnected'}")
+                # 데이터 새로고침
+                updated_data = _data_provider.update_data(current_data)
+                # 버튼 상태 업데이트
+                button_children = [
+                    html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
+                    html.Span(
+                        "연결됨" if is_connected else "연결끊김",
+                        style={"fontSize": "12px", "fontWeight": "600"},
+                    ),
+                ]
+                button_variant = "filled" if is_connected else "outline"
+                button_color = "green" if is_connected else "red"
+                return updated_data, button_children, button_variant, button_color
+            else:
+                logger.error("Failed to toggle connection")
+        raise PreventUpdate

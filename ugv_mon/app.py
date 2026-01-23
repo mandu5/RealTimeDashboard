@@ -54,18 +54,16 @@ def create_app() -> dash.Dash:
     
     # =========================================================================
     # 데이터 제공자 초기화
-    # - get_data_generator()가 환경변수에 따라 Mock 또는 Live 반환
-    # =========================================================================
-    data_gen = get_data_generator()
-    
-    # =========================================================================
-    # Live 모드인 경우 패킷 캡처 시작
-    # - LiveDataProvider 클래스에만 start_capture() 메서드 존재
-    # - hasattr()로 안전하게 확인
+    # - 환경변수에 따라 Mock 또는 Live 생성
     # =========================================================================
     use_live = os.getenv("UGV_MON_USE_LIVE", "").lower() == "true"
+    interface = os.getenv("UGV_MON_INTERFACE", config.network.interface)
     
-    if use_live and hasattr(data_gen, 'start_capture'):
+    if use_live:
+        from .data.live_provider import LiveDataProvider
+        data_gen = LiveDataProvider(interface=interface)
+        
+        # Live 모드인 경우 패킷 캡처 시작
         logger.info("Starting packet capture for Live mode...")
         success = data_gen.start_capture()
         
@@ -75,10 +73,13 @@ def create_app() -> dash.Dash:
             logger.error(
                 "❌ Failed to start packet capture.\n"
                 "   Solutions:\n"
-                "   1. Run with sudo: sudo -E python3 run.py\n"
+                "   1. Run with sudo: sudo python3 run_live.py\n"
                 "   2. Set capability: sudo setcap cap_net_raw+ep $(which python3)\n"
                 "   3. Check interface: ip link show"
             )
+    else:
+        from .data.mock_data import MockDataGenerator
+        data_gen = MockDataGenerator()
     
     # =========================================================================
     # 초기 데이터 생성 및 레이아웃 설정
@@ -89,15 +90,8 @@ def create_app() -> dash.Dash:
     app.layout = create_main_layout(initial_data, initial_logs)
     
     # =========================================================================
-    # 콜백 등록
+    # 콜백 등록 (data_provider 전달)
     # =========================================================================
-    register_callbacks(app)
+    register_callbacks(app, data_provider=data_gen)
     
     return app
-
-
-# =============================================================================
-# 모듈 레벨 앱 인스턴스
-# - import ugv_mon.app으로 접근 가능
-# =============================================================================
-app = create_app()

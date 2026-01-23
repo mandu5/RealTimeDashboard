@@ -3,12 +3,14 @@ Header Bar Component for UGV-MON Dashboard.
 
 Provides the top header bar with:
 - Dashboard title and branding
-- Connection status indicators
+- Connection status indicators (clickable button)
+- Interface selector (dropdown)
 - Active filter information
 """
 
 from dash import html
 from typing import Dict
+import dash_mantine_components as dmc
 
 from ..components.status_chip import create_status_chip
 
@@ -104,6 +106,9 @@ def create_status_chips(data: Dict) -> list:
     """
     Create the row of status chips for the header.
     
+    연결상태는 클릭 가능한 버튼, 인터페이스는 드롭다운으로 제공됩니다.
+    (Live 모드에서만 활성화, Mock 모드에서는 읽기 전용)
+    
     Args:
         data: Dashboard state dictionary
         
@@ -111,20 +116,48 @@ def create_status_chips(data: Dict) -> list:
         List of status chip components
     """
     is_connected = data.get("connected", False)
+    current_interface = data.get("interface", "lo")
+    
+    # 연결상태 토글 버튼 (Live 모드에서만 활성화)
+    connection_button = dmc.Button(
+        children=[
+            html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
+            html.Span(
+                "연결됨" if is_connected else "연결끊김",
+                style={"fontSize": "12px", "fontWeight": "600"},
+            ),
+        ],
+        id="connection-toggle-btn",
+        variant="filled" if is_connected else "outline",
+        color="green" if is_connected else "red",
+        size="xs",
+        style={
+            "minWidth": "120px",
+            "height": "32px",
+            "padding": "6px 12px",
+        },
+    )
+    
+    # 인터페이스 드롭다운 (Live 모드에서만 활성화)
+    interface_select = dmc.Select(
+        id="interface-select",
+        value=current_interface,
+        data=[
+            {"value": "lo", "label": "lo (Local)"},
+            {"value": "eno2", "label": "eno2"},
+            {"value": "eno3", "label": "eno3"},
+        ],
+        size="xs",
+        style={
+            "minWidth": "120px",
+        },
+        searchable=False,
+        clearable=False,
+    )
     
     return [
-        create_status_chip(
-            "연결상태",
-            "연결됨" if is_connected else "연결끊김",
-            "success" if is_connected else "destructive",
-            min_width="100px",
-        ),
-        create_status_chip(
-            "인터페이스",
-            data.get("interface", "---"),
-            "default",
-            min_width="100px",
-        ),
+        connection_button,
+        interface_select,
         create_status_chip(
             "필터",
             data.get("filter", "---"),
