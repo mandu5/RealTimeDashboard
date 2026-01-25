@@ -44,7 +44,7 @@ def main():
     """)
     
     app = create_app()
-    app.run_server(
+    app.run(
         debug=config.app.debug,
         host=config.app.host,
         port=config.app.port,
