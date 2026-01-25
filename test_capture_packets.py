@@ -4,21 +4,77 @@ Capture + Parser + Analysis 통합 테스트
 
 실행:
     sudo python3 test_capture_packets.py
+    
+    # 인터페이스 지정
+    sudo python3 test_capture_packets.py --interface eno2
 
 종료:
     Ctrl+C
+
+요구사항:
+    pip install scapy
 """
 
+import argparse
 import time
 import sys
 from datetime import datetime
+
 sys.path.insert(0, '.')
+
+# Scapy 설치 확인
+try:
+    import scapy
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
+    print("=" * 60)
+    print("❌ Scapy가 설치되어 있지 않습니다.")
+    print("=" * 60)
+    print()
+    print("설치 방법:")
+    print("  pip install scapy")
+    print()
+    print("macOS의 경우 추가 설치:")
+    print("  brew install libpcap")
+    print()
+    sys.exit(1)
 
 from ugv_mon.capture import PacketSniffer, PacketQueue
 from ugv_mon.parser import ICDParser
 from ugv_mon.analysis import StatsCalculator, AnomalyDetector
+from ugv_mon.config import config
+
+
+def parse_args():
+    """CLI 인자 파싱."""
+    parser = argparse.ArgumentParser(
+        description="Capture + Parser + Analysis 통합 테스트"
+    )
+    parser.add_argument(
+        "--interface", "-i",
+        type=str,
+        default=config.network.interface,
+        help=f"캡처할 네트워크 인터페이스 (기본: {config.network.interface})"
+    )
+    parser.add_argument(
+        "--src-port",
+        type=int,
+        default=config.network.source_port,
+        help=f"소스 포트 (기본: {config.network.source_port})"
+    )
+    parser.add_argument(
+        "--dst-port",
+        type=int,
+        default=config.network.dest_port,
+        help=f"목적지 포트 (기본: {config.network.dest_port})"
+    )
+    return parser.parse_args()
+
 
 def main():
+    args = parse_args()
+    
     print("=" * 60)
     print("Capture + Parser + Analysis 통합 테스트")
     print("=" * 60)
@@ -34,20 +90,32 @@ def main():
         timeout_sec=5.0       # 5초 이상 패킷 없으면 타임아웃
     )
     
-    # 스니퍼 시작
-    sniffer = PacketSniffer(
-        interface="lo",          # 로컬 인터페이스
-        src_port=50000,          # VIC 포트
-        dst_port=61000,          # OCS 포트
-        callback=queue.put       # 캡처된 패킷을 큐에 저장
-    )
-    print(f"[INFO] Interface: lo")
-    print(f"[INFO] Filter: UDP 50000 → 61000")
+    print(f"[INFO] Interface: {args.interface}")
+    print(f"[INFO] Filter: UDP {args.src_port} → {args.dst_port}")
     print(f"[INFO] 캡처 시작...")
     print()
     
-    # 2. 캡처 시작
-    sniffer.start()
+    # 스니퍼 생성 및 시작
+    try:
+        sniffer = PacketSniffer(
+            interface=args.interface,
+            src_port=args.src_port,
+            dst_port=args.dst_port,
+            callback=queue.put
+        )
+        sniffer.start()
+    except PermissionError:
+        print("=" * 60)
+        print("❌ 권한 오류: root 권한이 필요합니다.")
+        print("=" * 60)
+        print()
+        print("실행 방법:")
+        print(f"  sudo python3 {sys.argv[0]}")
+        print()
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ 스니퍼 시작 실패: {e}")
+        sys.exit(1)
     
     print("패킷 대기 중... (Ctrl+C로 종료)")
     print("-" * 60) 
@@ -58,63 +126,62 @@ def main():
     
     try:
         while True:
-            # 3. 큐에서 캡처된 패킷 가져오기
+            # 큐에서 캡처된 패킷 가져오기
             packets = queue.get_all()
             
             for raw_data in packets:
                 packet_count += 1
                 current_time = datetime.now()
                 
-                # 4. 파싱
+                # 파싱
                 result = parser.parse(raw_data)
                 
                 if result.success:
                     parse_success += 1
                     
-                    # 5. 통계 기록 (헤더의 timestamp는 int이므로 현재 시간 사용)
-                    # 실제로는 헤더의 timestamp를 사용해야 하지만, 
-                    # 여기서는 패킷 수신 시간을 사용
-                    jitter_ms = stats_calc.record_packet(
-                        timestamp=current_time,
-                        sequence=result.header.sequence,
-                        size=len(raw_data)
-                    )
-                    
-                    # 6. 이상 탐지
-                    if jitter_ms is not None:
-                        anomaly = anomaly_detector.check_jitter(jitter_ms)
-                        if anomaly:
-                            print(f"  ⚠️ 이상 탐지: {anomaly.message}")
-                    
-                    # 체크섬 에러 탐지
-                    if not result.checksum_ok:
-                        print(f"  ⚠️ 체크섬 에러: 패킷 무결성 검증 실패")
-                    
-                    last_packet_time = current_time
-               
-                    print(f"\n[패킷 #{packet_count}] 크기: {len(raw_data)} bytes")
-                    print(f"  체크섬: {'OK' if result.checksum_ok else 'FAIL'}")
-                    print(f"  시퀀스: {result.header.sequence}")
-                    print(f"  메시지코드: 0x{result.header.msg_code:02X}")
-                    
-                    if jitter_ms is not None:
-                        print(f"  지터: {jitter_ms:.2f} ms")
-                    
-                    if result.payload:
-                        print(f"  운용모드: {result.payload.operation_mode_label}")
-                        print(f"  운용권한: {result.payload.authority_label}")
-                        print(f"  주행상태: {result.payload.driving_state_label}")
+                    # 통계 기록
+                    if result.header is not None:
+                        jitter_ms = stats_calc.record_packet(
+                            timestamp=current_time,
+                            sequence=result.header.sequence,
+                            size=len(raw_data)
+                        )
                         
-                        connected = [k for k, v in result.payload.devices.items() if v]
-                        print(f"  연결장치: {connected}")
+                        # 이상 탐지
+                        if jitter_ms is not None:
+                            anomaly = anomaly_detector.check_jitter(jitter_ms)
+                            if anomaly:
+                                print(f"  ⚠️ 이상 탐지: {anomaly.message}")
                         
-                        emergency = [k for k, v in result.payload.emergency_status.items() if v]
-                        if emergency:
-                            print(f"  비상정지: {emergency}")
+                        # 체크섬 에러 탐지
+                        if not result.checksum_ok:
+                            print(f"  ⚠️ 체크섬 에러: 패킷 무결성 검증 실패")
+                        
+                        last_packet_time = current_time
+                   
+                        print(f"\n[패킷 #{packet_count}] 크기: {len(raw_data)} bytes")
+                        print(f"  체크섬: {'OK' if result.checksum_ok else 'FAIL'}")
+                        print(f"  시퀀스: {result.header.sequence}")
+                        print(f"  메시지코드: 0x{result.header.msg_code:02X}")
+                        
+                        if jitter_ms is not None:
+                            print(f"  지터: {jitter_ms:.2f} ms")
+                        
+                        if result.payload:
+                            print(f"  운용모드: {result.payload.operation_mode_label}")
+                            print(f"  운용권한: {result.payload.authority_label}")
+                            print(f"  주행상태: {result.payload.driving_state_label}")
+                            
+                            connected = [k for k, v in result.payload.devices.items() if v]
+                            print(f"  연결장치: {connected}")
+                            
+                            emergency = [k for k, v in result.payload.emergency_status.items() if v]
+                            if emergency:
+                                print(f"  비상정지: {emergency}")
                 else:
                     print(f"\n[패킷 #{packet_count}] 파싱 실패: {result.error}")
             
-            # 7. 주기적으로 통계 출력 (5초마다)
+            # 주기적으로 통계 출력 (5초마다)
             current_time_sec = time.time()
             if current_time_sec - last_stats_time >= 5.0:
                 stats = stats_calc.get_stats_dict()
@@ -197,6 +264,7 @@ def main():
                 print(f"  [{anomaly.severity.upper()}] {anomaly.timestamp.strftime('%H:%M:%S')} - {anomaly.message}")
         else:
             print("\n이상 탐지: 없음 ✅")
+
 
 if __name__ == "__main__":
     main()

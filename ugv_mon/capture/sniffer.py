@@ -101,7 +101,7 @@ class PacketSniffer:
                 self._stats.record_packet(len(raw_data), filtered=True)
                 self._callback(raw_data)
         except Exception as e:
-            logger.debug(f"Packet processing error: {e}")
+            logger.warning(f"Packet processing error: {e}")
 
     @property
     def interface(self) -> str:

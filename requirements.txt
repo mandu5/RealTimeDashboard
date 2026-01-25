@@ -10,3 +10,6 @@ plotly==5.18.0
 
 # Packet Capture (requires libpcap: apt-get install libpcap-dev)
 scapy==2.5.0
+
+# Testing
+pytest>=7.0.0

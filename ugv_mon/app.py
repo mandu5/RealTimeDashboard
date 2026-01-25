@@ -19,7 +19,7 @@ import logging
 import dash
 
 from .layouts.main_layout import create_main_layout
-from .callbacks.update_callbacks import register_callbacks, get_data_generator
+from .callbacks.update_callbacks import register_callbacks
 from .config import config
 
 # 로거 설정
@@ -73,7 +73,7 @@ def create_app() -> dash.Dash:
             logger.error(
                 "❌ Failed to start packet capture.\n"
                 "   Solutions:\n"
-                "   1. Run with sudo: sudo python3 run_live.py\n"
+                "   1. Run with sudo: sudo python3 run.py --mode live\n"
                 "   2. Set capability: sudo setcap cap_net_raw+ep $(which python3)\n"
                 "   3. Check interface: ip link show"
             )

@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 import threading
 
+from ..constants import MAX_SEQUENCE, EXPECTED_PPS
+
 
 @dataclass
 class PacketRecord:
@@ -26,7 +28,7 @@ class StatsCalculator:
         self._records: deque = deque()
         self._last_timestamp: Optional[datetime] = None
         self._last_sequence: Optional[int] = None
-        self._max_sequence = 256
+        self._max_sequence = MAX_SEQUENCE
         self._lock = threading.Lock()
 
     def record_packet(self, timestamp: datetime, sequence: int, size: int) -> Optional[float]:
@@ -95,8 +97,7 @@ class StatsCalculator:
             cutoff = now - timedelta(seconds=window)
             packets_in_window = sum(1 for r in self._records if r.timestamp >= cutoff)
 
-            expected_pps = 1000
-            expected_packets = window * expected_pps
+            expected_packets = window * EXPECTED_PPS
             return min(round((packets_in_window / max(expected_packets, 1)) * 100, 2), 100.0)
 
     def get_pps(self) -> int:
