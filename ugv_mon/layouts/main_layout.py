@@ -1,430 +1,97 @@
 """
 Main Dashboard Layout for UGV-MON.
 
-Composes all layout components into the complete dashboard view.
-Uses Dash Mantine Components for enterprise-grade styling.
-
-Layout Structure:
-1. Header bar (connection status, filter info)
-2. KPI cards row (8 metrics)
-3. Two-column main content:
-   - Left: Operational status, Emergency indicators
-   - Right: Device grid, Charts, Availability timeline
-4. Log table (full width)
+단일 페이지 대시보드 레이아웃을 구성합니다.
+나중에 멀티페이지로 확장 시 pages/dashboard.py로 이동 가능합니다.
 """
 
 from dash import dcc, html
 import dash_mantine_components as dmc
 from typing import Dict
 
-from .header import create_header_bar, create_status_chips
+from .header import create_header_bar
 from .panels import (
     create_operational_status_panel,
-    create_operational_status_boxes,
     create_emergency_status_panel,
-    create_emergency_indicators,
     create_device_panel,
-)
-from .charts import (
-    create_communication_chart,
-    create_availability_timeline,
+    create_charts_panel,
+    create_availability_panel,
+    create_log_panel,
 )
 from ..components.kpi_card import create_kpi_cards_row
-from ..components.device_grid import create_device_grid
-from ..components.log_table import create_log_table, create_log_table_header
 from ..config import config
+from ..styles import PAGE_CONTAINER, TWO_COLUMN_GRID, KPI_GRID, FLEX_COLUMN
 
 
 def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantineProvider:
     """
-    Create the complete dashboard layout.
-    
-    Assembles all components into a single-page monitoring dashboard.
+    대시보드 메인 레이아웃 생성.
     
     Args:
-        initial_data: Initial dashboard state dictionary
-        initial_logs: Initial log entries for the table
+        initial_data: 초기 대시보드 상태
+        initial_logs: 초기 로그 엔트리
         
     Returns:
-        MantineProvider wrapping the complete layout
+        MantineProvider로 래핑된 레이아웃
     """
     return dmc.MantineProvider(
         children=[
-            # Data stores
+            # 데이터 저장소
             dcc.Store(id="dashboard-data", data=initial_data),
             dcc.Store(id="is-paused", data=False),
-            dcc.Store(id="chart-time-range", data=60),  # Default: 1 minute (60 seconds)
+            dcc.Store(id="chart-time-range", data=60),
             
-            # Polling interval
+            # 폴링 인터벌
             dcc.Interval(
                 id="interval-component",
                 interval=config.ui.poll_interval_ms,
                 n_intervals=0,
             ),
             
-            # Main content wrapper
+            # 메인 컨텐츠
             html.Div(
                 children=[
-                    # Header Bar
                     create_header_bar(initial_data),
-                    
-                    # KPI Cards Row
-                    html.Div(
-                        id="kpi-cards",
-                        children=create_kpi_cards_row(initial_data),
-                        style={
-                            "display": "grid",
-                            "gridTemplateColumns": "repeat(8, 1fr)",
-                            "gap": "16px",
-                            "marginBottom": "24px",
-                        }
-                    ),
-                    
-                    # Main Content - Two Columns
-                    html.Div(
-                        children=[
-                            # Left Column
-                            html.Div(
-                                children=[
-                                    create_operational_status_panel(initial_data),
-                                    create_emergency_status_panel(
-                                        initial_data.get("emergencyStatus", {})
-                                    ),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "flexDirection": "column",
-                                }
-                            ),
-                            
-                            # Right Column
-                            html.Div(
-                                children=[
-                                    create_device_panel(
-                                        initial_data.get("devices", [])
-                                    ),
-                                    create_charts_panel(initial_data),
-                                    create_availability_panel(initial_data),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "flexDirection": "column",
-                                }
-                            ),
-                        ],
-                        style={
-                            "display": "grid",
-                            "gridTemplateColumns": "repeat(2, 1fr)",
-                            "gap": "24px",
-                            "marginBottom": "24px",
-                        }
-                    ),
-                    
-                    # Log Table
+                    _create_kpi_section(initial_data),
+                    _create_main_content(initial_data),
                     create_log_panel(initial_logs),
                 ],
-                style={
-                    "minHeight": "100vh",
-                    "background": "linear-gradient(to bottom right, #f8fafc, #f1f5f9)",
-                    "padding": "24px",
-                    "fontFamily": "Inter, sans-serif",
-                }
+                style=PAGE_CONTAINER,
             ),
         ]
     )
 
 
-def create_charts_panel(data: Dict) -> dmc.Card:
-    """
-    Create the communication quality charts panel.
-    
-    Contains combined PPS + Jitter time series charts with:
-    - Time range selection buttons (30s, 1m, 5m)
-    - Real-time PPS and Jitter values display
-    
-    Args:
-        data: Dashboard state with chart data
-        
-    Returns:
-        Mantine Card with embedded Plotly chart and controls
-    """
-    # Get latest values for display
-    chart_data = data.get("combinedData", [])
-    latest_pps = chart_data[-1].get("pps", 0) if chart_data else 0
-    latest_jitter = chart_data[-1].get("jitter", 0) if chart_data else 0
-    
-    return dmc.Card(
-        children=[
-            # Panel header with title and time range buttons
-            html.Div(
-                children=[
-                    # Title section
-                    html.Div(
-                        children=[
-                            html.Div(
-                                style={
-                                    "width": "4px",
-                                    "height": "16px",
-                                    "backgroundColor": "#3b82f6",
-                                    "borderRadius": "9999px",
-                                }
-                            ),
-                            html.Div(
-                                "통신 품질 차트",
-                                style={
-                                    "fontSize": "14px",
-                                    "fontWeight": "600",
-                                    "color": "#334155",
-                                }
-                            ),
-                        ],
-                        style={
-                            "display": "flex",
-                            "alignItems": "center",
-                            "gap": "8px",
-                        }
-                    ),
-                    # Legend (PPS and Jitter)
-                    html.Div(
-                        children=[
-                            html.Div(
-                                children=[
-                                    html.Div(
-                                        style={
-                                            "width": "12px",
-                                            "height": "12px",
-                                            "backgroundColor": "#3b82f6",
-                                            "borderRadius": "50%",
-                                        }
-                                    ),
-                                    html.Span("PPS (좌)", style={"fontSize": "12px", "color": "#64748b"}),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "gap": "6px",
-                                }
-                            ),
-                            html.Div(
-                                children=[
-                                    html.Div(
-                                        style={
-                                            "width": "12px",
-                                            "height": "12px",
-                                            "backgroundColor": "#9333ea",
-                                            "borderRadius": "50%",
-                                        }
-                                    ),
-                                    html.Span("지터 (우)", style={"fontSize": "12px", "color": "#64748b"}),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "gap": "6px",
-                                }
-                            ),
-                        ],
-                        style={
-                            "display": "flex",
-                            "alignItems": "center",
-                            "gap": "16px",
-                        }
-                    ),
-                    # Time range buttons
-                    html.Div(
-                        children=[
-                            dmc.Button(
-                                "30s",
-                                id="time-range-30s",
-                                variant="outline",
-                                size="xs",
-                                style={"minWidth": "40px"},
-                            ),
-                            dmc.Button(
-                                "1m",
-                                id="time-range-1m",
-                                variant="filled",
-                                size="xs",
-                                style={"minWidth": "40px"},
-                            ),
-                            dmc.Button(
-                                "5m",
-                                id="time-range-5m",
-                                variant="outline",
-                                size="xs",
-                                style={"minWidth": "40px"},
-                            ),
-                        ],
-                        style={
-                            "display": "flex",
-                            "gap": "4px",
-                        }
-                    ),
-                ],
-                style={
-                    "display": "flex",
-                    "justifyContent": "space-between",
-                    "alignItems": "center",
-                    "marginBottom": "16px",
-                }
-            ),
-            # Chart
-            dcc.Graph(
-                id="comm-quality-chart",
-                figure=create_communication_chart(
-                    data.get("combinedData", []),
-                    data.get("jitterP95", 0),
-                    data.get("jitterP99", 0),
-                    60,  # Default time range: 60 seconds
-                ),
-                config={
-                    "displayModeBar": False,
-                    "staticPlot": False,
-                    "doubleClick": False,
-                },
-            ),
-            # Bottom metrics display
-            html.Div(
-                children=[
-                    html.Div(
-                        children=[
-                            html.Span("PPS: ", style={"fontSize": "13px", "color": "#64748b"}),
-                            html.Span(
-                                id="current-pps-display",
-                                children=f"{latest_pps:,}",
-                                style={
-                                    "fontSize": "13px",
-                                    "fontWeight": "600",
-                                    "color": "#1e40af",
-                                    "fontFamily": "monospace",
-                                }
-                            ),
-                        ],
-                        style={
-                            "display": "flex",
-                            "alignItems": "center",
-                            "gap": "4px",
-                        }
-                    ),
-                    html.Div(
-                        children=[
-                            html.Span("지터: ", style={"fontSize": "13px", "color": "#64748b"}),
-                            html.Span(
-                                id="current-jitter-display",
-                                children=f"{latest_jitter:.1f} ms",
-                                style={
-                                    "fontSize": "13px",
-                                    "fontWeight": "600",
-                                    "color": "#7c3aed",
-                                    "fontFamily": "monospace",
-                                }
-                            ),
-                        ],
-                        style={
-                            "display": "flex",
-                            "alignItems": "center",
-                            "gap": "4px",
-                        }
-                    ),
-                ],
-                style={
-                    "display": "flex",
-                    "justifyContent": "space-between",
-                    "alignItems": "center",
-                    "marginTop": "12px",
-                    "paddingTop": "12px",
-                    "borderTop": "1px solid #e5e7eb",
-                }
-            ),
-        ],
-        withBorder=True,
-        p="lg",
-        radius="md",
-        style={"marginBottom": "24px"},
+def _create_kpi_section(data: Dict) -> html.Div:
+    """KPI 카드 섹션."""
+    return html.Div(
+        id="kpi-cards",
+        children=create_kpi_cards_row(data),
+        style=KPI_GRID,
     )
 
 
-def create_availability_panel(data: Dict) -> dmc.Card:
-    """
-    Create the availability timeline panel.
-    
-    Args:
-        data: Dashboard state with availability segments
-        
-    Returns:
-        Mantine Card with timeline chart
-    """
-    return dmc.Card(
+def _create_main_content(data: Dict) -> html.Div:
+    """메인 콘텐츠 (2컬럼 레이아웃)."""
+    return html.Div(
         children=[
-            # Panel header
+            # 좌측 컬럼
             html.Div(
                 children=[
-                    html.Div(
-                        style={
-                            "width": "4px",
-                            "height": "16px",
-                            "backgroundColor": "#3b82f6",
-                            "borderRadius": "9999px",
-                        }
-                    ),
-                    html.Div(
-                        "가용성 타임라인 (1시간)",
-                        style={
-                            "fontSize": "14px",
-                            "fontWeight": "600",
-                            "color": "#334155",
-                        }
-                    ),
+                    create_operational_status_panel(data),
+                    create_emergency_status_panel(data.get("emergencyStatus", {})),
                 ],
-                style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "gap": "8px",
-                    "marginBottom": "8px",
-                }
+                style=FLEX_COLUMN,
             ),
-            # Timeline chart
-            dcc.Graph(
-                id="availability-timeline",
-                figure=create_availability_timeline(
-                    data.get("availabilitySegments", [])
-                ),
-                config={
-                    "displayModeBar": False,
-                    "staticPlot": False,
-                    "doubleClick": False,
-                },
-            ),
-        ],
-        withBorder=True,
-        p="lg",
-        radius="md",
-    )
-
-
-def create_log_panel(logs: list) -> dmc.Card:
-    """
-    Create the log/event table panel.
-    
-    Args:
-        logs: List of log entry dictionaries
-        
-    Returns:
-        Mantine Card with AG-Grid table
-    """
-    return dmc.Card(
-        children=[
-            create_log_table_header(len(logs)),
+            # 우측 컬럼
             html.Div(
-                children=[create_log_table(logs)],
-                style={
-                    "border": "1px solid #e2e8f0",
-                    "borderRadius": "8px",
-                    "overflow": "hidden",
-                }
+                children=[
+                    create_device_panel(data.get("devices", [])),
+                    create_charts_panel(data),
+                    create_availability_panel(data),
+                ],
+                style=FLEX_COLUMN,
             ),
         ],
-        withBorder=True,
-        p="lg",
-        radius="md",
+        style=TWO_COLUMN_GRID,
     )

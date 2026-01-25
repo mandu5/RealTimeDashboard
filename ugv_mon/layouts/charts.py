@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Dict, List
 
-from ..utils.helpers import get_chart_colors
+from ..styles import get_chart_colors
 from ..config import config
 
 

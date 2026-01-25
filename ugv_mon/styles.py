@@ -1,92 +1,56 @@
 """
 UGV-MON 공통 UI 스타일 정의.
 
-UI 컴포넌트에서 사용되는 스타일 상수를 중앙 집중화합니다.
+모든 인라인 스타일을 중앙화하여 재사용성과 일관성을 높입니다.
 """
-
-from typing import Dict
 
 # =============================================================================
 # 색상 팔레트
 # =============================================================================
 
-# 주요 색상
 COLORS = {
-    "primary": "#3b82f6",          # Blue
+    # 주요 색상
+    "primary": "#3b82f6",
     "primary_dark": "#1e40af",
-    "secondary": "#64748b",        # Slate
-    "success": "#22c55e",          # Green
-    "success_bg": "#dcfce7",
-    "warning": "#f59e0b",          # Amber
-    "warning_bg": "#fef3c7",
-    "error": "#ef4444",            # Red
-    "error_bg": "#fee2e2",
+    "success": "#22c55e",
+    "success_dark": "#059669",
+    "warning": "#f59e0b",
+    "error": "#ef4444",
     "purple": "#9333ea",
-    "purple_dark": "#7c3aed",
     
-    # 텍스트 색상
-    "text_primary": "#0f172a",     # Slate 900
-    "text_secondary": "#334155",   # Slate 700
-    "text_muted": "#64748b",       # Slate 500
+    # 텍스트
+    "text_dark": "#0f172a",
+    "text_primary": "#1e293b",
+    "text_secondary": "#334155",
+    "text_muted": "#64748b",
     
-    # 배경 색상
-    "bg_gradient_start": "#f8fafc",
-    "bg_gradient_end": "#f1f5f9",
+    # 배경
+    "bg_page": "linear-gradient(to bottom right, #f8fafc, #f1f5f9)",
+    "bg_card": "white",
     "border": "#e2e8f0",
     "border_light": "#e5e7eb",
+    
+    # 상태별 배경 그라데이션
+    "bg_success": "linear-gradient(to bottom right, #d1fae5, #a7f3d0)",
+    "bg_info": "linear-gradient(to bottom right, #dbeafe, #bfdbfe)",
+    "bg_neutral": "linear-gradient(to bottom right, #f1f5f9, #e2e8f0)",
+    "bg_error": "#fee2e2",
 }
 
 # =============================================================================
-# 폰트 스타일
+# 공통 스타일
 # =============================================================================
 
-FONTS = {
-    "family": "Inter, sans-serif",
-    "family_mono": "monospace",
+# 패널 헤더 (타이틀 + 인디케이터)
+PANEL_HEADER = {
+    "display": "flex",
+    "alignItems": "center",
+    "gap": "8px",
+    "marginBottom": "16px",
 }
 
-FONT_SIZES = {
-    "xs": "11px",
-    "sm": "12px",
-    "md": "13px",
-    "base": "14px",
-    "lg": "16px",
-    "xl": "20px",
-    "2xl": "24px",
-}
-
-FONT_WEIGHTS = {
-    "normal": "400",
-    "medium": "500",
-    "semibold": "600",
-    "bold": "700",
-}
-
-# =============================================================================
-# 공통 스타일 함수
-# =============================================================================
-
-def panel_header_style() -> Dict:
-    """패널 헤더 공통 스타일."""
-    return {
-        "display": "flex",
-        "alignItems": "center",
-        "gap": "8px",
-        "marginBottom": "16px",
-    }
-
-
-def panel_title_style() -> Dict:
-    """패널 타이틀 공통 스타일."""
-    return {
-        "fontSize": FONT_SIZES["base"],
-        "fontWeight": FONT_WEIGHTS["semibold"],
-        "color": COLORS["text_secondary"],
-    }
-
-
-def panel_indicator_style(color: str = None) -> Dict:
-    """패널 인디케이터 (수직 바) 스타일."""
+# 수직 인디케이터 바
+def indicator_bar(color: str = None) -> dict:
     return {
         "width": "4px",
         "height": "16px",
@@ -94,55 +58,152 @@ def panel_indicator_style(color: str = None) -> Dict:
         "borderRadius": "9999px",
     }
 
+# 패널 타이틀 텍스트
+PANEL_TITLE = {
+    "fontSize": "14px",
+    "fontWeight": "600",
+    "color": COLORS["text_secondary"],
+}
 
-def kpi_value_style() -> Dict:
-    """KPI 값 표시 스타일."""
+# 카드 기본 스타일
+CARD_MARGIN = {"marginBottom": "24px"}
+
+# 페이지 컨테이너
+PAGE_CONTAINER = {
+    "minHeight": "100vh",
+    "background": COLORS["bg_page"],
+    "padding": "24px",
+    "fontFamily": "Inter, sans-serif",
+}
+
+# 헤더 바
+HEADER_BAR = {
+    "backgroundColor": COLORS["bg_card"],
+    "border": f"1px solid {COLORS['border']}",
+    "borderRadius": "12px",
+    "padding": "16px 24px",
+    "marginBottom": "24px",
+    "boxShadow": "0 1px 3px 0 rgba(0, 0, 0, 0.1)",
+}
+
+# 2개 컬럼 그리드
+TWO_COLUMN_GRID = {
+    "display": "grid",
+    "gridTemplateColumns": "repeat(2, 1fr)",
+    "gap": "24px",
+    "marginBottom": "24px",
+}
+
+# 8개 컬럼 그리드 (KPI 카드)
+KPI_GRID = {
+    "display": "grid",
+    "gridTemplateColumns": "repeat(8, 1fr)",
+    "gap": "16px",
+    "marginBottom": "24px",
+}
+
+# Flex 컬럼
+FLEX_COLUMN = {
+    "display": "flex",
+    "flexDirection": "column",
+}
+
+# Flex Row (gap 포함)
+def flex_row(gap: str = "8px") -> dict:
     return {
-        "fontSize": FONT_SIZES["2xl"],
-        "fontWeight": FONT_WEIGHTS["bold"],
-        "color": COLORS["text_primary"],
+        "display": "flex",
+        "alignItems": "center",
+        "gap": gap,
+    }
+
+# =============================================================================
+# 값 표시 스타일
+# =============================================================================
+
+VALUE_LARGE = {
+    "fontSize": "24px",
+    "fontWeight": "700",
+    "color": COLORS["text_dark"],
+}
+
+VALUE_MEDIUM = {
+    "fontSize": "16px",
+    "fontWeight": "700",
+}
+
+UNIT_SMALL = {
+    "fontSize": "12px",
+    "color": COLORS["text_muted"],
+    "fontWeight": "500",
+    "marginLeft": "4px",
+}
+
+LABEL_SMALL = {
+    "fontSize": "11px",
+    "color": COLORS["text_muted"],
+    "fontWeight": "500",
+    "marginBottom": "8px",
+}
+
+# =============================================================================
+# 헬퍼 함수
+# =============================================================================
+
+def status_box_style(bg_gradient: str, border_color: str) -> dict:
+    """상태 박스 (운용모드 등) 스타일 생성."""
+    return {
+        "background": bg_gradient,
+        "padding": "16px",
+        "borderRadius": "8px",
+        "border": f"1px solid {border_color}",
+    }
+
+def led_style(is_active: bool) -> dict:
+    """LED 인디케이터 스타일."""
+    return {
+        "width": "8px",
+        "height": "8px",
+        "borderRadius": "9999px",
+        "backgroundColor": COLORS["error"] if is_active else "#cbd5e1",
+        "boxShadow": "0 0 12px rgba(239, 68, 68, 0.5)" if is_active else "none",
     }
 
 
-def kpi_unit_style() -> Dict:
-    """KPI 단위 표시 스타일."""
-    return {
-        "fontSize": FONT_SIZES["sm"],
-        "color": COLORS["text_muted"],
-        "fontWeight": FONT_WEIGHTS["medium"],
-        "marginLeft": "4px",
+# =============================================================================
+# 상태 색상 헬퍼 (기존 helpers.py에서 통합)
+# =============================================================================
+
+def get_status_color(variant: str) -> dict:
+    """상태별 색상 스키마."""
+    color_map = {
+        "success": {"bg": "#d1fae5", "border": "#a7f3d0", "text": "#065f46"},
+        "warning": {"bg": "#fef3c7", "border": "#fde68a", "text": "#92400e"},
+        "destructive": {"bg": "#fee2e2", "border": "#fecaca", "text": "#991b1b"},
+        "info": {"bg": "#dbeafe", "border": "#bfdbfe", "text": "#1e40af"},
+        "default": {"bg": "#f1f5f9", "border": "#e2e8f0", "text": "#334155"},
     }
+    return color_map.get(variant, color_map["default"])
 
 
-def kpi_label_style() -> Dict:
-    """KPI 라벨 스타일."""
+def get_device_status_style(connected: bool, warning: bool = False) -> dict:
+    """장치 상태별 스타일."""
+    if not connected:
+        return {"backgroundColor": "#fee2e2", "border": "1px solid #fecaca", "color": "#991b1b"}
+    elif warning:
+        return {"backgroundColor": "#fef3c7", "border": "1px solid #fde68a", "color": "#92400e"}
+    return {"backgroundColor": "#d1fae5", "border": "1px solid #a7f3d0", "color": "#065f46"}
+
+
+def get_chart_colors() -> dict:
+    """차트 색상 팔레트."""
     return {
-        "fontSize": FONT_SIZES["xs"],
-        "color": COLORS["text_muted"],
-        "fontWeight": FONT_WEIGHTS["medium"],
-        "marginBottom": "8px",
-    }
-
-
-def status_ok_style() -> Dict:
-    """정상 상태 스타일."""
-    return {
-        "color": COLORS["success"],
-        "backgroundColor": COLORS["success_bg"],
-    }
-
-
-def status_warning_style() -> Dict:
-    """경고 상태 스타일."""
-    return {
-        "color": COLORS["warning"],
-        "backgroundColor": COLORS["warning_bg"],
-    }
-
-
-def status_error_style() -> Dict:
-    """오류 상태 스타일."""
-    return {
-        "color": COLORS["error"],
-        "backgroundColor": COLORS["error_bg"],
+        "primary": "#3b82f6",
+        "secondary": "#10b981",
+        "p95_line": "#f59e0b",
+        "p99_line": "#ef4444",
+        "fill_primary": "rgba(59, 130, 246, 0.1)",
+        "fill_secondary": "rgba(16, 185, 129, 0.1)",
+        "up_segment": "#10b981",
+        "down_segment": "#ef4444",
+        "grid": "#f1f5f9",
     }

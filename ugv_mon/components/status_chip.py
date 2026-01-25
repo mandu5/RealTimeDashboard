@@ -8,7 +8,7 @@ for connection status, interface, filter, and other metadata.
 from dash import html
 from typing import Literal
 
-from ..utils.helpers import get_status_color
+from ..styles import get_status_color
 
 
 StatusVariant = Literal["success", "warning", "destructive", "default", "info"]

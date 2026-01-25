@@ -1,80 +1,46 @@
 """
 Dash Callbacks for UGV-MON Dashboard.
 
-=============================================================================
-대시보드의 모든 상호작용을 처리합니다:
-- dcc.Interval을 통한 데이터 폴링
-- UI 상태 관리 (일시정지, 초기화)
-- 데이터 변경에 따른 컴포넌트 업데이트
-
-콜백 설계:
-- dcc.Store로 상태 관리
-- 클로저(Closure)를 통한 data_provider 캡처 (전역 상태 제거)
-- 단일 데이터 업데이트 콜백이 컴포넌트 업데이트를 트리거
-- 제어 버튼은 별도 콜백으로 순환 의존성 방지
-=============================================================================
+대시보드의 모든 상호작용을 처리합니다.
+클로저(Closure)를 통해 data_provider를 캡처합니다 (전역 상태 제거).
 """
 
 import logging
-from dash import Input, Output, State, callback_context
+from dash import Input, Output, State, callback_context, html
 from dash.exceptions import PreventUpdate
 from typing import Dict, Tuple, Protocol, List
 
 from ..components.kpi_card import create_kpi_cards_row
 from ..layouts.header import create_status_chips
 from ..components.device_grid import create_device_grid
-from ..layouts.panels import (
-    create_operational_status_boxes,
-    create_emergency_indicators,
-)
-from ..layouts.charts import (
-    create_communication_chart,
-    create_availability_timeline,
-)
+from ..layouts.panels import create_operational_status_boxes, create_emergency_indicators
+from ..layouts.charts import create_communication_chart, create_availability_timeline
 
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# Data Provider Protocol (Duck Typing Interface)
-# =============================================================================
 class DataProviderProtocol(Protocol):
-    """데이터 제공자 인터페이스 (Duck Typing)."""
-    
+    """데이터 제공자 인터페이스."""
     def update_data(self, prev_data: Dict) -> Dict: ...
     def get_logs(self, limit: int = 50) -> List[Dict]: ...
     def clear_logs(self) -> None: ...
-    
     @property
     def log_count(self) -> int: ...
 
 
-# =============================================================================
-# Callback Registration
-# =============================================================================
 def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
-    """
-    Register all dashboard callbacks with the Dash app.
-    
-    클로저를 사용하여 data_provider를 캡처합니다.
-    전역 변수 없이 상태를 관리합니다.
-    
-    Args:
-        app: Dash application instance
-        data_provider: 데이터 제공자 인스턴스 (Mock 또는 Live)
-    """
+    """모든 대시보드 콜백 등록."""
     if data_provider is None:
         raise ValueError("data_provider cannot be None")
     
-    _register_data_update_callback(app, data_provider)
-    _register_component_update_callback(app, data_provider)
+    _register_data_callback(app, data_provider)
+    _register_component_callback(app, data_provider)
     _register_control_callbacks(app, data_provider)
-    _register_ui_control_callbacks(app, data_provider)
+    _register_ui_callbacks(app, data_provider)
 
 
-def _register_data_update_callback(app, data_provider: DataProviderProtocol) -> None:
-    """Register the main data polling callback."""
-    
+def _register_data_callback(app, provider) -> None:
+    """데이터 폴링 콜백."""
     @app.callback(
         Output("dashboard-data", "data"),
         Input("interval-component", "n_intervals"),
@@ -82,26 +48,14 @@ def _register_data_update_callback(app, data_provider: DataProviderProtocol) -> 
         State("is-paused", "data"),
         prevent_initial_call=True,
     )
-    def update_dashboard_data(
-        n_intervals: int,
-        current_data: Dict,
-        is_paused: bool
-    ) -> Dict:
-        """
-        Update dashboard data on each polling interval.
-        
-        This is the main data update callback that runs every
-        poll_interval_ms (default 2000ms).
-        """
+    def update_data(n_intervals, current_data, is_paused):
         if is_paused:
             raise PreventUpdate
-        
-        return data_provider.update_data(current_data)
+        return provider.update_data(current_data)
 
 
-def _register_component_update_callback(app, data_provider: DataProviderProtocol) -> None:
-    """Register the callback that updates all UI components."""
-    
+def _register_component_callback(app, provider) -> None:
+    """UI 컴포넌트 업데이트 콜백."""
     @app.callback(
         [
             Output("status-chips", "children"),
@@ -116,194 +70,79 @@ def _register_component_update_callback(app, data_provider: DataProviderProtocol
             Output("current-pps-display", "children"),
             Output("current-jitter-display", "children"),
         ],
-        [
-            Input("dashboard-data", "data"),
-            Input("chart-time-range", "data"),
-        ],
+        [Input("dashboard-data", "data"), Input("chart-time-range", "data")],
     )
-    def update_all_components(
-        data: Dict,
-        time_range: int
-    ) -> Tuple:
-        """
-        Update all dashboard components when data changes.
-        """
-        # Status chips
-        status_chips = create_status_chips(data)
-        
-        # KPI cards
-        kpi_cards = create_kpi_cards_row(data)
-        
-        # Operational status boxes
-        operational_status = create_operational_status_boxes(data)
-        
-        # Emergency indicators
-        emergency_status = create_emergency_indicators(
-            data.get("emergencyStatus", {})
-        )
-        
-        # Device grid
-        device_grid = create_device_grid(data.get("devices", []))
-        
-        # Charts
-        comm_chart = create_communication_chart(
-            data.get("combinedData", []),
-            data.get("jitterP95", 0),
-            data.get("jitterP99", 0),
-            time_range if time_range else 60,
-        )
-        
-        avail_timeline = create_availability_timeline(
-            data.get("availabilitySegments", [])
-        )
-        
-        # Log table data
-        log_data = data_provider.get_logs(limit=50)
-        log_title = f"로그/이벤트 테이블 (최근 {data_provider.log_count}개)"
-        
-        # Current PPS and Jitter values
+    def update_components(data, time_range):
         chart_data = data.get("combinedData", [])
-        latest_pps = chart_data[-1].get("pps", 0) if chart_data else 0
-        latest_jitter = chart_data[-1].get("jitter", 0) if chart_data else 0
-        current_pps_text = f"{latest_pps:,}"
-        current_jitter_text = f"{latest_jitter:.1f} ms"
+        latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
         
         return (
-            status_chips,
-            kpi_cards,
-            operational_status,
-            emergency_status,
-            device_grid,
-            comm_chart,
-            avail_timeline,
-            log_data,
-            log_title,
-            current_pps_text,
-            current_jitter_text,
+            create_status_chips(data),
+            create_kpi_cards_row(data),
+            create_operational_status_boxes(data),
+            create_emergency_indicators(data.get("emergencyStatus", {})),
+            create_device_grid(data.get("devices", [])),
+            create_communication_chart(chart_data, data.get("jitterP95", 0), data.get("jitterP99", 0), time_range or 60),
+            create_availability_timeline(data.get("availabilitySegments", [])),
+            provider.get_logs(limit=50),
+            f"로그/이벤트 테이블 (최근 {provider.log_count}개)",
+            f"{latest.get('pps', 0):,}",
+            f"{latest.get('jitter', 0):.1f} ms",
         )
 
 
-def _register_control_callbacks(app, data_provider: DataProviderProtocol) -> None:
-    """Register control button callbacks."""
-    
-    @app.callback(
-        Output("is-paused", "data"),
-        Input("pause-btn", "n_clicks"),
-        State("is-paused", "data"),
-        prevent_initial_call=True,
-    )
-    def toggle_pause(n_clicks: int, is_paused: bool) -> bool:
-        """Toggle pause state for data updates."""
+def _register_control_callbacks(app, provider) -> None:
+    """제어 버튼 콜백."""
+    @app.callback(Output("is-paused", "data"), Input("pause-btn", "n_clicks"), State("is-paused", "data"), prevent_initial_call=True)
+    def toggle_pause(n_clicks, is_paused):
         return not is_paused
     
-    @app.callback(
-        Output("pause-btn", "children"),
-        Input("is-paused", "data"),
-    )
-    def update_pause_button_text(is_paused: bool) -> str:
-        """Update pause button text based on state."""
+    @app.callback(Output("pause-btn", "children"), Input("is-paused", "data"))
+    def update_pause_text(is_paused):
         return "Resume" if is_paused else "Pause"
     
     @app.callback(
-        [
-            Output("chart-time-range", "data"),
-            Output("time-range-30s", "variant"),
-            Output("time-range-1m", "variant"),
-            Output("time-range-5m", "variant"),
-        ],
-        [
-            Input("time-range-30s", "n_clicks"),
-            Input("time-range-1m", "n_clicks"),
-            Input("time-range-5m", "n_clicks"),
-        ],
+        [Output("chart-time-range", "data"), Output("time-range-30s", "variant"), Output("time-range-1m", "variant"), Output("time-range-5m", "variant")],
+        [Input("time-range-30s", "n_clicks"), Input("time-range-1m", "n_clicks"), Input("time-range-5m", "n_clicks")],
         prevent_initial_call=True,
     )
-    def update_time_range(
-        n_clicks_30s: int,
-        n_clicks_1m: int,
-        n_clicks_5m: int,
-    ) -> Tuple:
-        """Update chart time range based on button click."""
+    def update_time_range(n30, n1m, n5m):
         ctx = callback_context
         if not ctx.triggered:
             raise PreventUpdate
-        
-        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        
-        if button_id == "time-range-30s":
-            return 30, "filled", "outline", "outline"
-        elif button_id == "time-range-1m":
-            return 60, "outline", "filled", "outline"
-        elif button_id == "time-range-5m":
-            return 300, "outline", "outline", "filled"
-        else:
-            raise PreventUpdate
+        btn = ctx.triggered[0]["prop_id"].split(".")[0]
+        mappings = {"time-range-30s": (30, "filled", "outline", "outline"), "time-range-1m": (60, "outline", "filled", "outline"), "time-range-5m": (300, "outline", "outline", "filled")}
+        return mappings.get(btn, (60, "outline", "filled", "outline"))
     
-    @app.callback(
-        Output("dashboard-data", "data", allow_duplicate=True),
-        Input("clear-btn", "n_clicks"),
-        State("dashboard-data", "data"),
-        prevent_initial_call=True,
-    )
-    def clear_logs(n_clicks: int, current_data: Dict) -> Dict:
-        """Clear all log entries."""
-        data_provider.clear_logs()
+    @app.callback(Output("dashboard-data", "data", allow_duplicate=True), Input("clear-btn", "n_clicks"), State("dashboard-data", "data"), prevent_initial_call=True)
+    def clear_logs(n_clicks, current_data):
+        provider.clear_logs()
         return current_data
 
 
-def _register_ui_control_callbacks(app, data_provider: DataProviderProtocol) -> None:
-    """Register UI control callbacks (interface switch, connection toggle)."""
-    
-    @app.callback(
-        Output("dashboard-data", "data", allow_duplicate=True),
-        Input("interface-select", "value"),
-        State("dashboard-data", "data"),
-        prevent_initial_call=True,
-    )
-    def on_interface_change(new_interface: str, current_data: Dict) -> Dict:
-        """인터페이스 변경 처리."""
-        # LiveDataProvider인지 확인 (hasattr로 duck typing)
-        if hasattr(data_provider, 'switch_interface'):
-            success = data_provider.switch_interface(new_interface)
-            if success:
-                logger.info(f"Interface switched to: {new_interface}")
-                return data_provider.update_data(current_data)
-            else:
-                logger.error(f"Failed to switch interface to: {new_interface}")
+def _register_ui_callbacks(app, provider) -> None:
+    """UI 제어 콜백 (인터페이스 전환, 연결 토글)."""
+    @app.callback(Output("dashboard-data", "data", allow_duplicate=True), Input("interface-select", "value"), State("dashboard-data", "data"), prevent_initial_call=True)
+    def on_interface_change(new_interface, current_data):
+        if hasattr(provider, 'switch_interface') and provider.switch_interface(new_interface):
+            logger.info(f"Interface switched to: {new_interface}")
+            return provider.update_data(current_data)
         raise PreventUpdate
     
     @app.callback(
-        [
-            Output("dashboard-data", "data", allow_duplicate=True),
-            Output("connection-toggle-btn", "children", allow_duplicate=True),
-            Output("connection-toggle-btn", "variant", allow_duplicate=True),
-            Output("connection-toggle-btn", "color", allow_duplicate=True),
-        ],
-        Input("connection-toggle-btn", "n_clicks"),
-        State("dashboard-data", "data"),
-        prevent_initial_call=True,
+        [Output("dashboard-data", "data", allow_duplicate=True), Output("connection-toggle-btn", "children", allow_duplicate=True), Output("connection-toggle-btn", "variant", allow_duplicate=True), Output("connection-toggle-btn", "color", allow_duplicate=True)],
+        Input("connection-toggle-btn", "n_clicks"), State("dashboard-data", "data"), prevent_initial_call=True,
     )
-    def on_connection_toggle(n_clicks: int, current_data: Dict) -> Tuple:
-        """연결 상태 토글 처리."""
-        from dash import html
-        
-        # LiveDataProvider인지 확인 (hasattr로 duck typing)
-        if hasattr(data_provider, 'toggle_connection'):
-            success = data_provider.toggle_connection()
-            if success:
-                is_connected = getattr(data_provider, '_is_connected', False)
-                logger.info(f"Connection toggled: {'Connected' if is_connected else 'Disconnected'}")
-                updated_data = data_provider.update_data(current_data)
-                button_children = [
-                    html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
-                    html.Span(
-                        "연결됨" if is_connected else "연결끊김",
-                        style={"fontSize": "12px", "fontWeight": "600"},
-                    ),
-                ]
-                button_variant = "filled" if is_connected else "outline"
-                button_color = "green" if is_connected else "red"
-                return updated_data, button_children, button_variant, button_color
-            else:
-                logger.error("Failed to toggle connection")
+    def on_connection_toggle(n_clicks, current_data):
+        if not hasattr(provider, 'toggle_connection'):
+            raise PreventUpdate
+        if provider.toggle_connection():
+            is_conn = getattr(provider, '_is_connected', False)
+            return (
+                provider.update_data(current_data),
+                [html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}), html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"})],
+                "filled" if is_conn else "outline",
+                "green" if is_conn else "red",
+            )
+        logger.error("Failed to toggle connection")
         raise PreventUpdate
