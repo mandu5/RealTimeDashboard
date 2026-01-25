@@ -8,13 +8,14 @@ from typing import Dict, List
 
 from .models import LogEntry, DeviceStatus, AvailabilitySegment, EmergencyStatus
 from ..config import config
+from ..constants import DEVICE_IDS, DEVICE_NAMES, DEFAULT_INITIAL_SEQUENCE
 
 
 class MockDataGenerator:
     """Mock 데이터 생성기."""
 
     def __init__(self):
-        self._last_seq = 49195
+        self._last_seq = DEFAULT_INITIAL_SEQUENCE
         self._elapsed_time = 0
         self._logs_history: List[LogEntry] = []
         self._availability_segments: List[AvailabilitySegment] = [
@@ -51,19 +52,15 @@ class MockDataGenerator:
             ))
         self._last_seq += 14
 
-        # 장치 상태
-        devices = [
-            DeviceStatus("vic", "VIC", connected=True),
-            DeviceStatus("rdc", "RDC", connected=True),
-            DeviceStatus("adc", "ADC", connected=True),
-            DeviceStatus("fcam", "FCAM", connected=True),
-            DeviceStatus("rcam", "RCAM", connected=True),
-            DeviceStatus("acam", "ACAM", connected=True, warning=True, error_reason="응답 지연"),
-            DeviceStatus("scs", "SCS", connected=True),
-            DeviceStatus("dip", "DIP", connected=True),
-            DeviceStatus("tcc", "TCC", connected=False, error_reason="연결 타임아웃"),
-            DeviceStatus("tm", "TM", connected=True),
-        ]
+        # 장치 상태 (constants 모듈 활용)
+        devices = []
+        for device_id, name in zip(DEVICE_IDS, DEVICE_NAMES):
+            if name == "TCC":
+                devices.append(DeviceStatus(device_id, name, connected=False, error_reason="연결 타임아웃"))
+            elif name == "ACAM":
+                devices.append(DeviceStatus(device_id, name, connected=True, warning=True, error_reason="응답 지연"))
+            else:
+                devices.append(DeviceStatus(device_id, name, connected=True))
 
         return {
             "connected": True,

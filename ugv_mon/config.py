@@ -16,7 +16,7 @@ class AppConfig:
     """앱 서버 설정."""
     name: str = "UGV-MON Dashboard"
     version: str = "1.0.0"
-    debug: bool = True
+    debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8050
 

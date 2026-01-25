@@ -7,12 +7,15 @@ MockDataGenerator와 동일한 인터페이스로 모드 전환 가능.
 
 import logging
 import os
+import subprocess
+import platform
 from collections import deque
 from datetime import datetime
 from threading import Lock
 from typing import Dict, List, Optional
 
 from ..config import config
+from ..constants import DEVICE_IDS, DEVICE_NAMES
 from .models import LogEntry, DeviceStatus, AvailabilitySegment, EmergencyStatus
 
 logger = logging.getLogger(__name__)
@@ -80,10 +83,12 @@ class LiveDataProvider:
     def start_capture(self) -> bool:
         """패킷 캡처 시작."""
         if not CAPTURE_AVAILABLE:
+            logger.error("Capture modules not available")
             return False
 
-        if self._sniffer and self._sniffer.is_running():
-            return True
+        # 기존 sniffer 정리 (리소스 누수 방지)
+        if self._sniffer is not None:
+            self._cleanup_sniffer()
 
         try:
             self._sniffer = PacketSniffer(
@@ -94,17 +99,35 @@ class LiveDataProvider:
             )
             self._sniffer.start()
             self._is_connected = True
-            logger.info("Capture started")
+            logger.info(f"Capture started on interface: {self._interface}")
             return True
+        except PermissionError as e:
+            logger.error(f"Permission denied for packet capture: {e}")
+            logger.error("Run with sudo or set CAP_NET_RAW capability")
+            return False
+        except OSError as e:
+            logger.error(f"OS error starting capture: {e}")
+            return False
         except Exception as e:
             logger.error(f"Failed to start capture: {e}")
             return False
 
+    def _cleanup_sniffer(self) -> None:
+        """기존 sniffer 정리."""
+        if self._sniffer is not None:
+            try:
+                if self._sniffer.is_running():
+                    self._sniffer.stop()
+                logger.debug("Previous sniffer cleaned up")
+            except Exception as e:
+                logger.warning(f"Error cleaning up sniffer: {e}")
+            finally:
+                self._sniffer = None
+
     def stop_capture(self) -> None:
         """패킷 캡처 중지."""
-        if self._sniffer:
-            self._sniffer.stop()
-            self._is_connected = False
+        self._cleanup_sniffer()
+        self._is_connected = False
 
     def switch_interface(self, new_interface: str) -> bool:
         """
@@ -138,8 +161,7 @@ class LiveDataProvider:
                     # 실패 시 이전 인터페이스로 복구
                     logger.error(f"Failed to start capture on {new_interface}, reverting to {old_interface}")
                     self._interface = old_interface
-                    if was_running:
-                        self.start_capture()
+                    self.start_capture()  # 이전 인터페이스로 복구 시도
                     return False
                 logger.info(f"Interface switched successfully to {new_interface}")
                 return True
@@ -172,15 +194,43 @@ class LiveDataProvider:
         Returns:
             인터페이스 이름 리스트
         """
-        # 하드코딩된 인터페이스 목록 (실제 환경에 맞게 조정 가능)
-        # 나중에 시스템 명령어로 동적으로 가져올 수도 있음
-        return ["lo", "eno2", "eno3"]
+        try:
+            system = platform.system()
+            if system == "Linux":
+                result = subprocess.run(
+                    ["ip", "link", "show"],
+                    capture_output=True, text=True, timeout=5
+                )
+                interfaces = []
+                for line in result.stdout.split("\n"):
+                    if ": " in line and "@" not in line:
+                        parts = line.split(": ")
+                        if len(parts) >= 2:
+                            interface = parts[1].split("@")[0]
+                            interfaces.append(interface)
+                return interfaces if interfaces else ["lo", "eth0"]
+            elif system == "Darwin":  # macOS
+                result = subprocess.run(
+                    ["networksetup", "-listallhardwareports"],
+                    capture_output=True, text=True, timeout=5
+                )
+                interfaces = ["lo0"]  # loopback always available
+                for line in result.stdout.split("\n"):
+                    if line.startswith("Device:"):
+                        interface = line.replace("Device:", "").strip()
+                        interfaces.append(interface)
+                return interfaces if len(interfaces) > 1 else ["lo0", "en0"]
+            else:
+                return ["lo", "eth0"]  # Fallback
+        except Exception as e:
+            logger.warning(f"Failed to get interfaces dynamically: {e}")
+            return ["lo", "eno2", "eno3"]  # Fallback to hardcoded
 
     def generate_initial_data(self) -> Dict:
         """초기 데이터 생성."""
         self._current_devices = [
-            DeviceStatus(d, d.upper(), connected=False)
-            for d in ["vic", "rdc", "adc", "fcam", "rcam", "acam", "scs", "dip", "tcc", "tm"]
+            DeviceStatus(device_id, name.upper(), connected=False)
+            for device_id, name in zip(DEVICE_IDS, DEVICE_NAMES)
         ]
         self._availability_segments = [
             AvailabilitySegment(0, config.ui.timeline_duration_sec, is_up=False)
@@ -217,20 +267,23 @@ class LiveDataProvider:
         if not result.checksum_ok:
             self._checksum_fail += 1
 
-        # 통계 기록
-        if result.success and result.header and self._stats_calc:
+        # 헤더가 있을 때만 통계 기록 (None 체크 강화)
+        if result.success and result.header is not None and self._stats_calc:
             self._stats_calc.record_packet(now, result.header.sequence, len(raw_data))
             self._last_sequence = result.header.sequence
 
-        # 상태 업데이트
-        if result.success and result.payload:
+        # 페이로드가 있을 때만 상태 업데이트
+        if result.success and result.payload is not None:
             self._update_from_payload(result.payload)
 
-        # 로그 추가
+        # 로그 추가 (헤더 None 체크)
+        sequence = result.header.sequence if result.header else 0
+        msg_code = f"0x{result.header.msg_code:02X}" if result.header else "???"
+        
         self._logs_history.appendleft(LogEntry(
             timestamp=now,
-            sequence=result.header.sequence if result.header else 0,
-            msg_code=f"0x{result.header.msg_code:02X}" if result.header else "???",
+            sequence=sequence,
+            msg_code=msg_code,
             parse_ok=result.success,
             checksum_ok=result.checksum_ok,
             mode=self._current_mode,
@@ -247,9 +300,7 @@ class LiveDataProvider:
         self._current_authority = payload.authority_label
         self._current_driving = payload.driving_state_label
 
-        # 장치 상태
-        device_ids = ["vic", "rdc", "adc", "fcam", "rcam", "acam", "scs", "dip", "tcc", "tm"]
-        device_names = ["VIC", "RDC", "ADC", "FCAM", "RCAM", "ACAM", "SCS", "DIP", "TCC", "TM"]
+        # 장치 상태 (constants 모듈 활용)
         self._current_devices = [
             DeviceStatus(
                 device_id=did,
@@ -257,7 +308,7 @@ class LiveDataProvider:
                 connected=payload.devices.get(name, False),
                 error_reason=None if payload.devices.get(name, False) else "연결 안 됨"
             )
-            for did, name in zip(device_ids, device_names)
+            for did, name in zip(DEVICE_IDS, DEVICE_NAMES)
         ]
 
         # 비상정지 상태
@@ -341,17 +392,3 @@ class LiveDataProvider:
     @property
     def log_count(self) -> int:
         return len(self._logs_history)
-
-
-def get_data_provider(use_live: bool = None):
-    """데이터 제공자 팩토리."""
-    if use_live is None:
-        use_live = os.getenv("UGV_MON_USE_LIVE", "").lower() == "true"
-
-    if use_live:
-        logger.info("Using LiveDataProvider")
-        return LiveDataProvider()
-    else:
-        logger.info("Using MockDataGenerator")
-        from .mock_data import MockDataGenerator
-        return MockDataGenerator()
