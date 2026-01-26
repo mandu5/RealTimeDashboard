@@ -1,6 +1,8 @@
 """
-Live Data Provider - 실시간 패킷 캡처 및 파싱 통합.
-MockDataGenerator와 동일한 인터페이스로 모드 전환 가능.
+Live Data Provider - 실시간 패킷 캡처 및 헤더 파싱.
+
+NOTE: 페이로드는 ICD 명세 확정 전까지 파싱하지 않음.
+헤더 기반 통계만 제공 (PPS, 지터, 패킷 손실 등).
 """
 
 import logging
@@ -14,14 +16,14 @@ from typing import Dict, List, Optional
 
 from ..config import config
 from ..constants import DEVICE_IDS, DEVICE_NAMES
-from .models import LogEntry, DeviceStatus, AvailabilitySegment, EmergencyStatus
+from .models import LogEntry, DeviceStatus, EmergencyStatus
 
 logger = logging.getLogger(__name__)
 
 try:
     from ..capture import PacketSniffer, PacketQueue
     from ..parser import ICDParser
-    from ..analysis import StatsCalculator, AnomalyDetector
+    from ..analysis import StatsCalculator
     CAPTURE_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Capture modules not available: {e}")
@@ -29,7 +31,7 @@ except ImportError as e:
 
 
 class LiveDataProvider:
-    """실시간 데이터 제공자."""
+    """실시간 데이터 제공자 (헤더 기반)."""
 
     def __init__(self, interface: str = None):
         self._interface = interface or os.getenv("UGV_MON_INTERFACE") or config.network.interface
@@ -48,13 +50,6 @@ class LiveDataProvider:
         self._chart_data: deque = deque(maxlen=config.ui.max_chart_points)
         self._is_connected = False
         self._last_packet_time: Optional[datetime] = None
-        
-        # 운용 상태
-        self._mode = "준비 (PREP)"
-        self._authority = "해제됨 (RELEASED)"
-        self._driving = "원격 (REMOTE)"
-        self._devices: List[DeviceStatus] = []
-        self._emergency = EmergencyStatus()
         
         # 통계
         self._total_packets = 0
@@ -141,15 +136,18 @@ class LiveDataProvider:
     # =========================================================================
     
     def generate_initial_data(self) -> Dict:
-        self._devices = [DeviceStatus(did, name.upper(), False) for did, name in zip(DEVICE_IDS, DEVICE_NAMES)]
-        return self._build_state()
+        # 장치 상태는 UI 표시용 기본값 (Live에서는 업데이트 안됨)
+        devices = [DeviceStatus(did, name.upper(), False) for did, name in zip(DEVICE_IDS, DEVICE_NAMES)]
+        return self._build_state(devices)
 
     def update_data(self, prev_data: Dict) -> Dict:
         with self._lock:
             self._process_packets()
             self._check_timeout()
             self._update_chart()
-            return self._build_state()
+            # 장치/운용상태는 prev_data 유지 (페이로드 파싱 안함)
+            devices = prev_data.get("devices", [])
+            return self._build_state(devices if isinstance(devices, list) else [])
 
     def _process_packets(self):
         if not self._packet_queue or not self._parser:
@@ -167,30 +165,20 @@ class LiveDataProvider:
         if not result.checksum_ok:
             self._checksum_fail += 1
         
+        # 헤더 기반 통계
         if result.success and result.header and self._stats_calc:
             self._stats_calc.record_packet(now, result.header.sequence, len(raw))
         
-        if result.success and result.payload:
-            self._update_from_payload(result.payload)
-        
+        # 로그 추가 (헤더 정보만)
         seq = result.header.sequence if result.header else 0
         msg = f"0x{result.header.msg_code:02X}" if result.header else "???"
-        self._logs.appendleft(LogEntry(now, seq, msg, result.success, result.checksum_ok, self._mode, self._authority, "" if result.success else (result.error or "실패")))
+        self._logs.appendleft(LogEntry(
+            now, seq, msg, result.success, result.checksum_ok,
+            "---", "---",  # 운용 상태는 페이로드 파싱 필요하므로 미표시
+            "" if result.success else (result.error or "파싱 실패")
+        ))
         self._last_packet_time = now
         self._is_connected = True
-
-    def _update_from_payload(self, p):
-        self._mode = p.operation_mode_label
-        self._authority = p.authority_label
-        self._driving = p.driving_state_label
-        self._devices = [DeviceStatus(did, name, p.devices.get(name, False), None if p.devices.get(name) else "연결 안 됨") for did, name in zip(DEVICE_IDS, DEVICE_NAMES)]
-        es = EmergencyStatus()
-        mapping = [("communication_lost", "통신 두절"), ("equipment_fail_driving", "장비고장(주행)"), ("equipment_fail_power", "장비고장(동력계)"),
-                   ("signal_lost_driving", "신호단절(주행)"), ("signal_lost_autonomous", "신호단절(자율)"), ("signal_lost_navigation", "신호단절(항법)"),
-                   ("signal_lost_power", "신호단절(동력계)"), ("signal_lost_comm", "신호단절(통신)"), ("manual_stop_ocs", "수동정지(운용통제장치)"), ("manual_stop_near", "수동정지(근거리조종기)")]
-        for attr, key in mapping:
-            setattr(es, attr, p.emergency_status.get(key, False))
-        self._emergency = es
 
     def _check_timeout(self):
         if self._last_packet_time and (datetime.now() - self._last_packet_time).total_seconds() >= config.ui.down_threshold_sec:
@@ -201,22 +189,29 @@ class LiveDataProvider:
         stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
         self._chart_data.append({"timestamp": now.strftime("%H:%M:%S"), "pps": stats.get("pps", 0), "jitter": stats.get("jitter_avg", 0.0)})
 
-    def _build_state(self) -> Dict:
+    def _build_state(self, devices: list) -> Dict:
         stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
         return {
-            "connected": self._is_connected, "interface": self._interface,
+            "connected": self._is_connected,
+            "interface": self._interface,
             "filter": f"{self._src_port}→{self._dst_port}",
             "lastPacketTime": self._last_packet_time.strftime("%H:%M:%S") if self._last_packet_time else "",
-            "capturePps": stats.get("pps", 0), "filterPass": 100.0,
+            "capturePps": stats.get("pps", 0),
+            "filterPass": 100.0,
             "parseSuccess": round((self._parse_success / max(self._total_packets, 1)) * 100, 1),
             "checksumFail": round((self._checksum_fail / max(self._total_packets, 1)) * 100, 1),
             "packetLoss": stats.get("packet_loss", 0),
-            "availability5min": stats.get("availability", 0.0), "availability1hour": stats.get("availability", 0.0),
-            "jitterP95": stats.get("jitter_p95", 0.0), "jitterP99": stats.get("jitter_p99", 0.0),
-            "operationalMode": self._mode, "operationalAuthority": self._authority, "drivingState": self._driving,
+            "availability5min": stats.get("availability", 0.0),
+            "availability1hour": stats.get("availability", 0.0),
+            "jitterP95": stats.get("jitter_p95", 0.0),
+            "jitterP99": stats.get("jitter_p99", 0.0),
+            # 페이로드 기반 상태 - ICD 명세 확정 전까지 기본값
+            "operationalMode": "--- (ICD 미확정)",
+            "operationalAuthority": "--- (ICD 미확정)", 
+            "drivingState": "--- (ICD 미확정)",
             "combinedData": list(self._chart_data),
-            "devices": [d.to_dict() for d in self._devices],
-            "emergencyStatus": self._emergency.to_dict(),
+            "devices": devices if devices else [{"name": n, "connected": False} for n in DEVICE_NAMES],
+            "emergencyStatus": EmergencyStatus().to_dict(),
             "availabilitySegments": [{"start": 0, "end": config.ui.timeline_duration_sec, "isUp": self._is_connected}],
         }
 

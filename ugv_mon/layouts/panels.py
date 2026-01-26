@@ -15,7 +15,7 @@ import dash_mantine_components as dmc
 from typing import Dict, List
 
 from ..styles import (
-    COLORS, PANEL_HEADER, PANEL_TITLE, CARD_MARGIN, FLEX_COLUMN,
+    COLORS, PANEL_HEADER, PANEL_TITLE, CARD_MARGIN,
     indicator_bar, status_box_style, led_style, flex_row,
 )
 from .charts import create_communication_chart, create_availability_timeline
@@ -144,7 +144,7 @@ def create_charts_panel(data: Dict) -> dmc.Card:
     
     return dmc.Card(
         children=[
-            _chart_header(latest_pps, latest_jitter),
+            _chart_header(),
             dcc.Graph(
                 id="comm-quality-chart",
                 figure=create_communication_chart(
@@ -158,7 +158,7 @@ def create_charts_panel(data: Dict) -> dmc.Card:
     )
 
 
-def _chart_header(pps: int, jitter: float) -> html.Div:
+def _chart_header() -> html.Div:
     """차트 헤더 (타이틀 + 범례 + 시간 버튼)."""
     return html.Div(
         children=[

@@ -4,9 +4,9 @@ UGV-MON 대시보드 데이터 모델.
 Dashboard 상태, 로그 엔트리, 장치 상태 등의 타입 정의.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from enum import Enum
 
 
