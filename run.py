@@ -89,15 +89,13 @@ def resolve_mode(args) -> bool:
     return env_live == "true"
 
 
-def resolve_interface(args, use_live: bool) -> str:
+def resolve_interface(args) -> str:
     """인터페이스 결정 (CLI > 환경변수 > 설정)."""
     if args.interface is not None:
         return args.interface
-    
     env_interface = os.getenv("UGV_MON_INTERFACE")
     if env_interface:
         return env_interface
-    
     return config.network.interface
 
 
@@ -107,7 +105,7 @@ def main():
     
     # 모드 및 설정 결정
     use_live = resolve_mode(args)
-    interface = resolve_interface(args, use_live)
+    interface = resolve_interface(args)
     port = args.port or config.app.port
     debug = args.debug if args.debug is not None else config.app.debug
     

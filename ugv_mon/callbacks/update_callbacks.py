@@ -8,7 +8,7 @@ Dash Callbacks for UGV-MON Dashboard.
 import logging
 from dash import Input, Output, State, callback_context, html
 from dash.exceptions import PreventUpdate
-from typing import Dict, Tuple, Protocol, List
+from typing import Dict, Protocol, List
 
 from ..components.kpi_card import create_kpi_cards_row
 from ..layouts.header import create_status_chips
