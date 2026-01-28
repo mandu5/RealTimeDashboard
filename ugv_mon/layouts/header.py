@@ -5,14 +5,14 @@ Header Bar Component for UGV-MON Dashboard.
 """
 
 from dash import html
-from typing import Dict
+from typing import Dict, List
 import dash_mantine_components as dmc
 
 from ..components.status_chip import create_status_chip
 from ..styles import COLORS, HEADER_BAR, flex_row, indicator_bar
 
 
-def create_header_bar(data: Dict) -> html.Div:
+def create_header_bar(data: Dict, available_interfaces: List[str] = None) -> html.Div:
     """대시보드 헤더 바 생성."""
     return html.Div(
         children=[
@@ -29,7 +29,7 @@ def create_header_bar(data: Dict) -> html.Div:
                     # 상태 칩
                     html.Div(
                         id="status-chips",
-                        children=create_status_chips(data),
+                        children=create_status_chips(data, available_interfaces),
                         style={"display": "flex", "gap": "8px", "flexWrap": "nowrap", "alignItems": "center"},
                     ),
                 ],
@@ -40,10 +40,20 @@ def create_header_bar(data: Dict) -> html.Div:
     )
 
 
-def create_status_chips(data: Dict) -> list:
+def create_status_chips(data: Dict, available_interfaces: List[str] = None) -> list:
     """헤더 상태 칩들 생성."""
     is_connected = data.get("connected", False)
     current_interface = data.get("interface", "lo")
+    
+    # 동적 인터페이스 목록 또는 기본값
+    if available_interfaces is None:
+        available_interfaces = ["lo", "eno2", "eno3"]
+    
+    # 인터페이스 드롭다운 옵션 생성
+    interface_options = []
+    for iface in available_interfaces:
+        label = f"{iface} (Local)" if iface in ["lo", "lo0"] else iface
+        interface_options.append({"value": iface, "label": label})
     
     return [
         # 연결상태 토글 버튼
@@ -58,11 +68,11 @@ def create_status_chips(data: Dict) -> list:
             size="xs",
             style={"minWidth": "120px", "height": "32px", "padding": "6px 12px"},
         ),
-        # 인터페이스 드롭다운
+        # 인터페이스 드롭다운 (동적 목록)
         dmc.Select(
             id="interface-select",
             value=current_interface,
-            data=[{"value": "lo", "label": "lo (Local)"}, {"value": "eno2", "label": "eno2"}, {"value": "eno3", "label": "eno3"}],
+            data=interface_options,
             size="xs",
             style={"minWidth": "120px"},
             searchable=False,
@@ -71,3 +81,4 @@ def create_status_chips(data: Dict) -> list:
         create_status_chip("필터", data.get("filter", "---"), "default", min_width="100px"),
         create_status_chip("마지막 패킷", data.get("lastPacketTime", "---"), "info", min_width="140px"),
     ]
+

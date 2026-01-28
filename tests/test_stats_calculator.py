@@ -60,46 +60,49 @@ class TestJitterCalculation:
         assert jitter is None
 
     def test_jitter_calculation(self):
-        """지터 계산 정확성."""
+        """지터 계산 정확성 (간격 변동 기반)."""
         now = datetime.now()
-        self.calc.record_packet(now, sequence=1, size=100)
+        # 첫 번째 패킷 - 지터 없음
+        self.calc.record_packet(now, sequence=1, size=100, msg_code=1)
         
-        # 10ms 후 두 번째 패킷
-        jitter = self.calc.record_packet(now + timedelta(milliseconds=10), sequence=2, size=100)
+        # 두 번째 패킷 (10ms 후) - 첫 간격 기록, 지터 아직 없음
+        jitter2 = self.calc.record_packet(now + timedelta(milliseconds=10), sequence=2, size=100, msg_code=1)
+        assert jitter2 is None  # 첫 간격만 기록됨
         
-        assert jitter is not None
-        assert abs(jitter - 10.0) < 1.0  # 약간의 오차 허용
+        # 세 번째 패킷 (10ms 후) - 지터 = |10 - 10| = 0
+        jitter3 = self.calc.record_packet(now + timedelta(milliseconds=20), sequence=3, size=100, msg_code=1)
+        assert jitter3 is not None
+        assert abs(jitter3 - 0.0) < 1.0  # 동일 간격이므로 지터 거의 0
 
     def test_average_jitter(self):
-        """평균 지터 계산."""
+        """평균 지터 계산 (간격 변동 기반)."""
         now = datetime.now()
-        intervals = [10, 20, 30]  # ms
+        intervals = [10, 10, 10]  # ms - 동일 간격
         
-        self.calc.record_packet(now, sequence=0, size=100)
+        self.calc.record_packet(now, sequence=0, size=100, msg_code=1)
         for i, interval in enumerate(intervals):
             now += timedelta(milliseconds=interval)
-            self.calc.record_packet(now, sequence=i+1, size=100)
+            self.calc.record_packet(now, sequence=i+1, size=100, msg_code=1)
         
         avg = self.calc.get_average_jitter()
-        expected_avg = sum(intervals) / len(intervals)
-        
-        assert abs(avg - expected_avg) < 1.0
+        # 동일 간격이므로 지터 변동 = 0
+        assert avg < 1.0
 
     def test_jitter_percentiles(self):
-        """지터 백분위 계산."""
+        """지터 백분위 계산 (간격 변동 기반)."""
         now = datetime.now()
         
-        # 100개 패킷 기록 (10ms 간격)
-        self.calc.record_packet(now, sequence=0, size=100)
+        # 100개 패킷 기록 (10ms 간격) - 동일 간격이므로 지터 모두 ~0
+        self.calc.record_packet(now, sequence=0, size=100, msg_code=1)
         for i in range(100):
             now += timedelta(milliseconds=10)
-            self.calc.record_packet(now, sequence=(i+1) % MAX_SEQUENCE, size=100)
+            self.calc.record_packet(now, sequence=(i+1) % MAX_SEQUENCE, size=100, msg_code=1)
         
         p95, p99 = self.calc.get_jitter_percentiles()
         
-        # 모두 약 10ms이므로 P95, P99도 약 10ms여야 함
-        assert 8.0 < p95 < 12.0
-        assert 8.0 < p99 < 12.0
+        # 동일 간격이므로 P95, P99도 거의 0이어야 함
+        assert p95 < 2.0
+        assert p99 < 2.0
 
 
 class TestPacketLossCalculation:
@@ -190,10 +193,10 @@ class TestAvailabilityCalculation:
         self.calc = StatsCalculator(window_sec=60)
 
     def test_availability_empty(self):
-        """빈 상태는 100% 가용성."""
+        """빈 상태는 0% 가용성 (패킷 없음 = 연결 없음)."""
         avail = self.calc.get_availability()
         
-        assert avail == 100.0
+        assert avail == 0.0
 
     def test_availability_capped_at_100(self):
         """가용성 100% 상한."""

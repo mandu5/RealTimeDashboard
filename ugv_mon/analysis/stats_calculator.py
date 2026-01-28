@@ -1,11 +1,16 @@
 """
 실시간 통계 계산기 - PPS, 지터, 패킷 손실, 가용성.
+
+수정 이력:
+- 2026-01-28: 지터를 간격 변동(|현재 간격 - 이전 간격|)으로 계산
+- 2026-01-28: 가용성을 패킷 수 기반 → 연결 상태(간격) 기반으로 변경
+- 2026-01-28: msg_code별 지터 계산 분리
 """
 
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 import threading
 
 from ..constants import MAX_SEQUENCE, EXPECTED_PPS
@@ -28,16 +33,34 @@ class StatsCalculator:
         self._records: deque = deque()
         self._last_timestamp: Optional[datetime] = None
         self._last_sequence: Optional[int] = None
+        self._last_interval: Optional[float] = None
         self._max_sequence = MAX_SEQUENCE
         self._lock = threading.Lock()
+        
+        # msg_code별 마지막 timestamp/interval 저장
+        self._last_by_code: Dict[int, Dict] = {}
 
-    def record_packet(self, timestamp: datetime, sequence: int, size: int) -> Optional[float]:
+    def record_packet(self, timestamp: datetime, sequence: int, size: int, msg_code: int = 0) -> Optional[float]:
         """패킷 기록 및 지터 반환."""
         with self._lock:
             jitter_ms = None
-            if self._last_timestamp is not None:
-                time_diff = (timestamp - self._last_timestamp).total_seconds() * 1000
-                jitter_ms = abs(time_diff)
+            
+            # msg_code별로 지터 계산
+            if msg_code not in self._last_by_code:
+                self._last_by_code[msg_code] = {"timestamp": None, "interval": None}
+            
+            code_data = self._last_by_code[msg_code]
+            
+            if code_data["timestamp"] is not None:
+                interval_ms = (timestamp - code_data["timestamp"]).total_seconds() * 1000
+                
+                if code_data["interval"] is not None:
+                    # 지터 = |현재 간격 - 이전 간격|
+                    jitter_ms = abs(interval_ms - code_data["interval"])
+                
+                code_data["interval"] = interval_ms
+            
+            code_data["timestamp"] = timestamp
 
             self._records.append(PacketRecord(timestamp, sequence, size, jitter_ms))
             self._last_timestamp = timestamp
@@ -87,18 +110,52 @@ class StatsCalculator:
         return (self._max_sequence - prev_seq) + curr_seq
 
     def get_availability(self, window_sec: Optional[int] = None) -> float:
-        """가용성 계산."""
+        """
+        가용성 계산 - 패킷 수신 간격 기반.
+        
+        패킷 간격이 TIMEOUT 이내면 "연결됨"으로 간주하고,
+        연결된 시간 / 전체 측정 시간으로 가용성 계산.
+        """
         with self._lock:
             if not self._records:
-                return 100.0
+                return 0.0
 
             now = datetime.now()
             window = window_sec or self._window_sec
             cutoff = now - timedelta(seconds=window)
-            packets_in_window = sum(1 for r in self._records if r.timestamp >= cutoff)
-
-            expected_packets = window * EXPECTED_PPS
-            return min(round((packets_in_window / max(expected_packets, 1)) * 100, 2), 100.0)
+            
+            # 윈도우 내 패킷만 필터
+            records_in_window = [r for r in self._records if r.timestamp >= cutoff]
+            
+            if not records_in_window:
+                return 0.0
+            
+            # 실제 측정 구간 = 첫 패킷 ~ 현재
+            first_packet_time = records_in_window[0].timestamp
+            actual_duration = (now - first_packet_time).total_seconds()
+            
+            # 측정 구간이 너무 짧으면 100% 반환
+            if actual_duration < 1.0:
+                return 100.0
+            
+            # 연결 상태 시간 계산
+            # 패킷 간격이 TIMEOUT 이내면 "연결됨"으로 간주
+            TIMEOUT_SEC = 1.5  # 1초마다 패킷이 오니까 1.5초로 설정
+            
+            connected_time = 0.0
+            for i in range(len(records_in_window) - 1):
+                gap = (records_in_window[i + 1].timestamp - records_in_window[i].timestamp).total_seconds()
+                if gap <= TIMEOUT_SEC:
+                    connected_time += gap
+            
+            # 마지막 패킷 ~ 현재까지도 계산
+            last_gap = (now - records_in_window[-1].timestamp).total_seconds()
+            if last_gap <= TIMEOUT_SEC:
+                connected_time += last_gap
+            
+            # 실제 측정 구간 기준으로 계산
+            availability = (connected_time / actual_duration) * 100
+            return min(round(availability, 2), 100.0)
 
     def get_pps(self) -> int:
         """현재 PPS."""
@@ -119,6 +176,8 @@ class StatsCalculator:
             self._records.clear()
             self._last_timestamp = None
             self._last_sequence = None
+            self._last_interval = None
+            self._last_by_code.clear()
 
     def get_stats_dict(self) -> dict:
         """전체 통계 딕셔너리."""
@@ -131,3 +190,4 @@ class StatsCalculator:
             "packet_loss": self.get_packet_loss(),
             "availability": self.get_availability(),
         }
+

@@ -152,11 +152,11 @@ class LiveDataProvider:
     def _process_packets(self):
         if not self._packet_queue or not self._parser:
             return
-        for raw in self._packet_queue.get_all():
-            self._process_packet(raw)
+        for capture_time, raw in self._packet_queue.get_all():
+            self._process_packet(raw, capture_time)
 
-    def _process_packet(self, raw: bytes):
-        now = datetime.now()
+    def _process_packet(self, raw: bytes, capture_time: datetime):
+        """패킷 처리 (캡처 시점 timestamp 사용)."""
         self._total_packets += 1
         result = self._parser.parse(raw)
         
@@ -165,19 +165,24 @@ class LiveDataProvider:
         if not result.checksum_ok:
             self._checksum_fail += 1
         
-        # 헤더 기반 통계
+        # 헤더 기반 통계 (msg_code 포함)
         if result.success and result.header and self._stats_calc:
-            self._stats_calc.record_packet(now, result.header.sequence, len(raw))
+            self._stats_calc.record_packet(
+                capture_time,
+                result.header.sequence,
+                len(raw),
+                result.header.msg_code  # msg_code 추가
+            )
         
         # 로그 추가 (헤더 정보만)
         seq = result.header.sequence if result.header else 0
         msg = f"0x{result.header.msg_code:02X}" if result.header else "???"
         self._logs.appendleft(LogEntry(
-            now, seq, msg, result.success, result.checksum_ok,
+            capture_time, seq, msg, result.success, result.checksum_ok,
             "---", "---",  # 운용 상태는 페이로드 파싱 필요하므로 미표시
             "" if result.success else (result.error or "파싱 실패")
         ))
-        self._last_packet_time = now
+        self._last_packet_time = capture_time
         self._is_connected = True
 
     def _check_timeout(self):
@@ -197,12 +202,10 @@ class LiveDataProvider:
             "filter": f"{self._src_port}→{self._dst_port}",
             "lastPacketTime": self._last_packet_time.strftime("%H:%M:%S") if self._last_packet_time else "",
             "capturePps": stats.get("pps", 0),
-            "filterPass": 100.0,
             "parseSuccess": round((self._parse_success / max(self._total_packets, 1)) * 100, 1),
             "checksumFail": round((self._checksum_fail / max(self._total_packets, 1)) * 100, 1),
             "packetLoss": stats.get("packet_loss", 0),
             "availability5min": stats.get("availability", 0.0),
-            "availability1hour": stats.get("availability", 0.0),
             "jitterP95": stats.get("jitter_p95", 0.0),
             "jitterP99": stats.get("jitter_p99", 0.0),
             # 페이로드 기반 상태 - ICD 명세 확정 전까지 기본값

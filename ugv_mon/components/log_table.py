@@ -212,9 +212,45 @@ def create_log_table_header(log_count: int) -> html.Div:
                     "gap": "8px",
                 }
             ),
-            # Control buttons
+            # Filter and Control buttons
             html.Div(
                 children=[
+                    # Msg Code Filter
+                    dmc.Select(
+                        id="log-filter-msgcode",
+                        placeholder="Msg Code",
+                        data=[
+                            {"value": "all", "label": "모든 코드"},
+                            {"value": "0x01", "label": "0x01"},
+                            {"value": "0x25", "label": "0x25"},
+                            {"value": "0x40", "label": "0x40"},
+                        ],
+                        value="all",
+                        size="xs",
+                        style={"width": "100px"},
+                        clearable=False,
+                    ),
+                    # Status Filter
+                    dmc.Select(
+                        id="log-filter-status",
+                        placeholder="상태",
+                        data=[
+                            {"value": "all", "label": "모든 상태"},
+                            {"value": "success", "label": "✓ 성공만"},
+                            {"value": "error", "label": "✗ 에러만"},
+                        ],
+                        value="all",
+                        size="xs",
+                        style={"width": "100px"},
+                        clearable=False,
+                    ),
+                    # Search Input
+                    dmc.TextInput(
+                        id="log-search-input",
+                        placeholder="검색...",
+                        size="xs",
+                        style={"width": "120px"},
+                    ),
                     dmc.Button(
                         "Pause",
                         id="pause-btn",
@@ -232,6 +268,7 @@ def create_log_table_header(log_count: int) -> html.Div:
                 style={
                     "display": "flex",
                     "gap": "8px",
+                    "alignItems": "center",
                 }
             ),
         ],
@@ -242,3 +279,37 @@ def create_log_table_header(log_count: int) -> html.Div:
             "marginBottom": "16px",
         }
     )
+
+
+def filter_logs(logs: List[Dict], msg_code_filter: str, status_filter: str, search_text: str) -> List[Dict]:
+    """
+    Filter log entries based on criteria.
+    
+    Args:
+        logs: List of log dictionaries
+        msg_code_filter: 'all' or specific msg_code like '0x01'
+        status_filter: 'all', 'success', or 'error'
+        search_text: Text to search in notes field
+        
+    Returns:
+        Filtered list of logs
+    """
+    filtered = logs
+    
+    # Msg Code filter
+    if msg_code_filter and msg_code_filter != "all":
+        filtered = [log for log in filtered if log.get("msg_code", "") == msg_code_filter]
+    
+    # Status filter
+    if status_filter == "success":
+        filtered = [log for log in filtered if log.get("parse_ok") == "✓" and log.get("checksum_ok") == "✓"]
+    elif status_filter == "error":
+        filtered = [log for log in filtered if log.get("parse_ok") == "✗" or log.get("checksum_ok") == "✗"]
+    
+    # Search filter (notes field)
+    if search_text:
+        search_lower = search_text.lower()
+        filtered = [log for log in filtered if search_lower in log.get("notes", "").lower()]
+    
+    return filtered
+

@@ -4,7 +4,8 @@ Scapy 기반 패킷 스니퍼.
 
 import threading
 import logging
-from typing import Callable, Optional
+from datetime import datetime
+from typing import Callable, Optional, Tuple
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -97,9 +98,10 @@ class PacketSniffer:
         """패킷 처리."""
         try:
             if UDP in packet and Raw in packet:
+                capture_time = datetime.now()  # 캡처 시점 저장
                 raw_data = bytes(packet[Raw].load)
                 self._stats.record_packet(len(raw_data), filtered=True)
-                self._callback(raw_data)
+                self._callback((capture_time, raw_data))  # 튜플로 전달
         except Exception as e:
             logger.warning(f"Packet processing error: {e}")
 

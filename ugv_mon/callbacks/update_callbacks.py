@@ -13,6 +13,7 @@ from typing import Dict, Protocol, List
 from ..components.kpi_card import create_kpi_cards_row
 from ..layouts.header import create_status_chips
 from ..components.device_grid import create_device_grid
+from ..components.log_table import filter_logs
 from ..layouts.panels import create_operational_status_boxes, create_emergency_indicators
 from ..layouts.charts import create_communication_chart, create_availability_timeline
 
@@ -28,7 +29,7 @@ class DataProviderProtocol(Protocol):
     def log_count(self) -> int: ...
 
 
-def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
+def register_callbacks(app, data_provider: DataProviderProtocol, alert_manager=None) -> None:
     """모든 대시보드 콜백 등록."""
     if data_provider is None:
         raise ValueError("data_provider cannot be None")
@@ -37,6 +38,10 @@ def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     _register_component_callback(app, data_provider)
     _register_control_callbacks(app, data_provider)
     _register_ui_callbacks(app, data_provider)
+    
+    # 알림 시스템 (선택적)
+    if alert_manager is not None:
+        _register_alert_callbacks(app, data_provider, alert_manager)
 
 
 def _register_data_callback(app, provider) -> None:
@@ -70,11 +75,22 @@ def _register_component_callback(app, provider) -> None:
             Output("current-pps-display", "children"),
             Output("current-jitter-display", "children"),
         ],
-        [Input("dashboard-data", "data"), Input("chart-time-range", "data")],
+        [
+            Input("dashboard-data", "data"),
+            Input("chart-time-range", "data"),
+            Input("log-filter-msgcode", "value"),
+            Input("log-filter-status", "value"),
+            Input("log-search-input", "value"),
+        ],
     )
-    def update_components(data, time_range):
+    def update_components(data, time_range, msg_filter, status_filter, search_text):
         chart_data = data.get("combinedData", [])
         latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
+        
+        # Get logs and apply filters
+        logs = provider.get_logs(limit=50)
+        filtered_logs = filter_logs(logs, msg_filter or "all", status_filter or "all", search_text or "")
+        filter_info = f" (필터: {len(filtered_logs)}/{len(logs)})" if len(filtered_logs) != len(logs) else ""
         
         return (
             create_status_chips(data),
@@ -84,8 +100,8 @@ def _register_component_callback(app, provider) -> None:
             create_device_grid(data.get("devices", [])),
             create_communication_chart(chart_data, data.get("jitterP95", 0), data.get("jitterP99", 0), time_range or 60),
             create_availability_timeline(data.get("availabilitySegments", [])),
-            provider.get_logs(limit=50),
-            f"로그/이벤트 테이블 (최근 {provider.log_count}개)",
+            filtered_logs,
+            f"로그/이벤트 테이블 (최근 {provider.log_count}개){filter_info}",
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
         )
@@ -146,3 +162,27 @@ def _register_ui_callbacks(app, provider) -> None:
             )
         logger.error("Failed to toggle connection")
         raise PreventUpdate
+
+
+def _register_alert_callbacks(app, provider, alert_manager) -> None:
+    """알림 시스템 콜백."""
+    from ..components.alerts import create_toast_notification
+    from ..utils.alert_logger import log_alert
+    
+    @app.callback(
+        Output("alert-store", "data"),
+        Input("dashboard-data", "data"),
+        prevent_initial_call=True,
+    )
+    def check_alerts(data):
+        """데이터 업데이트 시 알림 조건 체크."""
+        alerts = alert_manager.check_conditions(data)
+        
+        # 로그 파일에 기록
+        for alert in alerts:
+            log_alert(alert)
+            logger.warning(f"Alert: {alert.title} - {alert.message}")
+        
+        # 알림 props 반환
+        return [create_toast_notification(a) for a in alerts]
+
