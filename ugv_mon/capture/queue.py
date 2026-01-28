@@ -4,7 +4,7 @@
 
 import threading
 from collections import deque
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime
 
 
@@ -15,14 +15,18 @@ class PacketQueue:
         self._queue: deque = deque(maxlen=max_size)
         self._lock = threading.Lock()
         self._last_put_time: Optional[datetime] = None
-        self._last_packet: Optional[bytes] = None  # 중복 체크용
+        self._last_packet: Optional[Tuple[datetime, bytes]] = None  # 중복 체크용
 
-    def put(self, packet: bytes) -> None:
-        """패킷 추가."""
+    def put(self, packet: Tuple[datetime, bytes]) -> None:
+        """패킷 추가 (튜플: capture_time, raw_data)."""
         with self._lock:
-            if packet == self._last_packet:
+            # 튜플의 두 번째 요소(raw_data)로 중복 체크
+            raw_data = packet[1] if isinstance(packet, tuple) else packet
+            last_raw = self._last_packet[1] if isinstance(self._last_packet, tuple) and self._last_packet else None
+            
+            if raw_data == last_raw:
                 return
-                
+            
             self._last_packet = packet
             self._queue.append(packet)
             self._last_put_time = datetime.now()
