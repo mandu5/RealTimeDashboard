@@ -26,9 +26,13 @@ class PacketRecord:
 
 
 class StatsCalculator:
-    """실시간 통계 계산기."""
+    """실시간 통계 계산기.
+    
+    수정 이력:
+    - 2026-01-29: window_sec 60→300 변경, 가용성 계산 개선
+    """
 
-    def __init__(self, window_sec: int = 60):
+    def __init__(self, window_sec: int = 300):  # 5분으로 변경
         self._window_sec = window_sec
         self._records: deque = deque()
         self._last_timestamp: Optional[datetime] = None
@@ -111,10 +115,9 @@ class StatsCalculator:
 
     def get_availability(self, window_sec: Optional[int] = None) -> float:
         """
-        가용성 계산 - 패킷 수신 간격 기반.
+        가용성 계산 - 최근 N분간 연결 시간 비율.
         
-        패킷 간격이 TIMEOUT 이내면 "연결됨"으로 간주하고,
-        연결된 시간 / 전체 측정 시간으로 가용성 계산.
+        5분 이상이면 window 기준, 미만이면 실제 경과 시간 기준.
         """
         with self._lock:
             if not self._records:
@@ -130,17 +133,22 @@ class StatsCalculator:
             if not records_in_window:
                 return 0.0
             
-            # 실제 측정 구간 = 첫 패킷 ~ 현재
             first_packet_time = records_in_window[0].timestamp
-            actual_duration = (now - first_packet_time).total_seconds()
+            
+            # 5분 이상이면 window 기준, 미만이면 실제 경과 시간 기준
+            if first_packet_time <= cutoff:
+                # 첫 패킷이 cutoff 이전 = window만큼 데이터 있음
+                actual_duration = window
+            else:
+                # 첫 패킷 ~ 현재
+                actual_duration = (now - first_packet_time).total_seconds()
             
             # 측정 구간이 너무 짧으면 100% 반환
             if actual_duration < 1.0:
                 return 100.0
             
             # 연결 상태 시간 계산
-            # 패킷 간격이 TIMEOUT 이내면 "연결됨"으로 간주
-            TIMEOUT_SEC = 1.5  # 1초마다 패킷이 오니까 1.5초로 설정
+            TIMEOUT_SEC = 1.5
             
             connected_time = 0.0
             for i in range(len(records_in_window) - 1):
@@ -153,7 +161,6 @@ class StatsCalculator:
             if last_gap <= TIMEOUT_SEC:
                 connected_time += last_gap
             
-            # 실제 측정 구간 기준으로 계산
             availability = (connected_time / actual_duration) * 100
             return min(round(availability, 2), 100.0)
 
@@ -182,12 +189,14 @@ class StatsCalculator:
     def get_stats_dict(self) -> dict:
         """전체 통계 딕셔너리."""
         p95, p99 = self.get_jitter_percentiles()
+        availability = self.get_availability()  # 한 번만 호출
+        
         return {
             "pps": self.get_pps(),
             "jitter_avg": self.get_average_jitter(),
             "jitter_p95": p95,
             "jitter_p99": p99,
             "packet_loss": self.get_packet_loss(),
-            "availability": self.get_availability(),
+            "availability": availability,
         }
 

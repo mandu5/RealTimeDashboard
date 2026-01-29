@@ -36,22 +36,10 @@ def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantinePro
     """
     return dmc.MantineProvider(
         children=[
-            # Notifications Provider (토스트 알림용)
-            dmc.NotificationsProvider(
-                id="notifications-provider",
-                position="top-right",
-                autoClose=5000,
-                children=[
-                    # 알림 트리거용 숨겨진 div
-                    html.Div(id="notification-trigger", style={"display": "none"}),
-                ],
-            ),
-            
             # 데이터 저장소
             dcc.Store(id="dashboard-data", data=initial_data),
             dcc.Store(id="is-paused", data=False),
             dcc.Store(id="chart-time-range", data=60),
-            dcc.Store(id="alert-store", data=[]),  # 알림 저장소
             
             # 폴링 인터벌
             dcc.Interval(

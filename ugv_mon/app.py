@@ -20,7 +20,6 @@ import dash
 
 from .layouts.main_layout import create_main_layout
 from .callbacks.update_callbacks import register_callbacks
-from .components.alerts import AlertManager
 from .config import config
 
 # 로거 설정
@@ -50,6 +49,7 @@ def create_app() -> dash.Dash:
     app = dash.Dash(
         __name__,
         suppress_callback_exceptions=True,
+        update_title=None,  # "Updating..." 표시 비활성화
         title=config.app.name,
     )
     
@@ -83,11 +83,6 @@ def create_app() -> dash.Dash:
         data_gen = MockDataGenerator()
     
     # =========================================================================
-    # 알림 매니저 초기화
-    # =========================================================================
-    alert_manager = AlertManager()
-    
-    # =========================================================================
     # 초기 데이터 생성 및 레이아웃 설정
     # =========================================================================
     initial_data = data_gen.generate_initial_data()
@@ -96,9 +91,9 @@ def create_app() -> dash.Dash:
     app.layout = create_main_layout(initial_data, initial_logs)
     
     # =========================================================================
-    # 콜백 등록 (data_provider + alert_manager 전달)
+    # 콜백 등록 (data_provider 전달)
     # =========================================================================
-    register_callbacks(app, data_provider=data_gen, alert_manager=alert_manager)
+    register_callbacks(app, data_provider=data_gen)
     
     return app
 
