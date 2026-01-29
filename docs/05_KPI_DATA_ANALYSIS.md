@@ -1,6 +1,6 @@
 # UGV-MON KPI 상세 설명서
 
-> **작성일**: 2026-01-28  
+> **최종 업데이트**: 2026-01-29  
 > **목적**: 멘토님 발표용 자료 - 각 KPI의 정의, 계산 방식, 데이터 흐름을 완벽하게 이해할 수 있도록 작성
 
 ---
@@ -129,7 +129,7 @@ def get_pps(self) -> int:
 
 ```python
 # stats_calculator.py
-self._records: deque[PacketRecord]  # 모든 패킷 기록 저장 (최대 60초분)
+self._records: deque[PacketRecord]  # 모든 패킷 기록 저장 (최대 5분=300초분)
 ```
 
 ---

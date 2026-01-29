@@ -183,7 +183,8 @@ class LiveDataProvider:
             "" if result.success else (result.error or "파싱 실패")
         ))
         self._last_packet_time = capture_time
-        self._is_connected = True
+        # NOTE: self._is_connected는 toggle_connection()에서만 제어
+        # 패킷 수신 시 덮어쓰지 않음 (버튼 즉시 반응 문제 해결)
 
     def _check_timeout(self):
         if self._last_packet_time and (datetime.now() - self._last_packet_time).total_seconds() >= config.ui.down_threshold_sec:

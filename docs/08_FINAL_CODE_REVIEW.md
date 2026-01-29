@@ -1,7 +1,7 @@
 # UGV-MON 최종 코드 리뷰 보고서
 
-> **작성일**: 2026-01-28  
-> **리뷰 버전**: 1.5.0 (기능 추가 후)
+> **최종 업데이트**: 2026-01-29  
+> **버전**: 1.6.0 (버그 수정 및 기능 개선)
 
 ---
 
@@ -16,9 +16,92 @@
 
 ---
 
-## 2. 아키텍처 평가
+## 2. 오늘 수정된 버그 (2026-01-29)
 
-### 2.1 디렉토리 구조 (★★★★★)
+### 2.1 가용성이 갑자기 100%로 튀는 문제
+
+| 항목 | 내용 |
+|------|------|
+| **원인** | `window_sec=60`으로 설정, 60초 지나면 레코드 삭제되어 계산 오류 |
+| **해결** | `window_sec=300` (5분)으로 변경, 측정 구간 계산 로직 개선 |
+| **파일** | `analysis/stats_calculator.py` |
+
+```python
+# 수정 전
+def __init__(self, window_sec: int = 60):
+
+# 수정 후
+def __init__(self, window_sec: int = 300):  # 5분으로 변경
+```
+
+### 2.2 제목이 "Updating..."으로 바뀌는 문제
+
+| 항목 | 내용 |
+|------|------|
+| **원인** | Dash 기본 동작 (콜백 실행 중 제목 변경) |
+| **해결** | `update_title=None` 옵션 추가 |
+| **파일** | `app.py` |
+
+### 2.3 연결 버튼이 즉시 안 바뀌는 문제
+
+| 항목 | 내용 |
+|------|------|
+| **원인** | `_process_packet()`에서 `self._is_connected = True` 덮어씀 |
+| **해결** | 해당 라인 삭제, 버튼 콜백 분리 |
+| **파일** | `live_provider.py`, `update_callbacks.py` |
+
+---
+
+## 3. 알려진 이슈
+
+### 3.1 ⚠️ Print문 중복 출력 문제
+
+**증상**: `_register_component_callback`의 print문이 2초 폴링마다 2-3번 중복 출력됨
+
+**원인 분석**:
+```
+dashboard-data → update_components 콜백
+         ├── Input: dashboard-data (데이터 폴링)
+         ├── Input: chart-time-range (시간 범위)
+         ├── Input: log-filter-msgcode (필터)
+         ├── Input: log-filter-status (필터)
+         └── Input: log-search-input (검색)
+```
+
+Dash는 **모든 Input이 변경될 때마다** 콜백을 실행함. 초기화 시 여러 Input이 동시에 변경되면 중복 호출 발생.
+
+**해결 방법**:
+```python
+# 방법 1: callback_context로 트리거 확인
+from dash import callback_context
+
+def update_components(data, ...):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    print(f"Triggered by: {triggered_id}")  # 디버깅용
+    ...
+
+# 방법 2: prevent_initial_call 사용
+@app.callback(..., prevent_initial_call=True)
+```
+
+**디버깅 방법**:
+```python
+# update_callbacks.py에 추가
+import time
+def update_components(data, ...):
+    print(f"[{time.time():.3f}] update_components called, trigger: {callback_context.triggered}")
+    ...
+```
+
+---
+
+## 4. 아키텍처 평가
+
+### 4.1 디렉토리 구조 (★★★★★)
 
 ```
 ugv_mon/
@@ -36,12 +119,7 @@ ugv_mon/
 └── styles.py
 ```
 
-**장점**:
-- 명확한 책임 분리 (SRP)
-- 계층적 의존성 (파서 → 분석 → 데이터 → UI)
-- Mock/Live 추상화로 테스트 용이
-
-### 2.2 데이터 흐름 (★★★★☆)
+### 4.2 데이터 흐름 (★★★★☆)
 
 ```
 [Scapy] → [sniffer.py] → [queue.py] → [live_provider.py] → [callbacks] → [UI]
@@ -49,143 +127,64 @@ ugv_mon/
                                       [stats_calculator.py]
 ```
 
-**장점**: 단방향 흐름, 명확한 책임
-**개선점**: 현재 폴링 방식 → 향후 WebSocket 고려 가능
-
 ---
 
-## 3. 코드 품질 분석
-
-### 3.1 파일별 분석
+## 5. 코드 품질 분석
 
 | 파일 | LOC | 복잡도 | 품질 | 비고 |
 |------|-----|--------|------|------|
-| `icd_parser.py` | ~130 | 중 | ★★★★★ | 잘 구조화됨, 통계 분리 |
-| `stats_calculator.py` | ~200 | 중 | ★★★★☆ | msg_code별 지터 분리 Good |
-| `live_provider.py` | ~280 | 높음 | ★★★★☆ | Protocol 기반 DI |
-| `update_callbacks.py` | ~190 | 중 | ★★★★☆ | 콜백 함수 분리 |
+| `icd_parser.py` | ~130 | 중 | ★★★★★ | 잘 구조화됨 |
+| `stats_calculator.py` | ~200 | 중 | ★★★★★ | window 5분, 가용성 계산 개선됨 |
+| `live_provider.py` | ~235 | 높음 | ★★★★☆ | _is_connected 로직 개선됨 |
+| `update_callbacks.py` | ~200 | 중 | ★★★★☆ | 버튼 콜백 분리됨 |
 | `charts.py` | ~330 | 중 | ★★★☆☆ | 함수 분리 가능 |
 | `panels.py` | ~300 | 중 | ★★★☆☆ | 중복 스타일 존재 |
 | `alerts.py` | ~160 | 낮음 | ★★★★★ | 깔끔한 클래스 구조 |
 | `log_table.py` | ~280 | 낮음 | ★★★★☆ | 필터 기능 추가됨 |
 
-### 3.2 강점
+---
 
-1. **Type Hints**: 대부분의 함수에 타입 힌트 적용
-2. **Docstrings**: 주요 함수에 독스트링 존재
-3. **상수화**: `constants.py`, `styles.py` 분리
-4. **DI 패턴**: Protocol 기반 의존성 주입
-5. **테스트 커버리지**: 핵심 로직 테스트 33개
+## 6. 구현된 기능
 
-### 3.3 개선 필요 영역
+### 6.1 로그 필터링/검색 ✅
+- Msg Code 필터 (All, 0x01, 0x25, 0x40)
+- 상태 필터 (All, 성공만, 에러만)
+- 텍스트 검색 (Notes 필드)
 
-1. **콜백 함수 길이**: 일부 콜백이 10+ 라인 (분리 권장)
-2. **중복 스타일**: panels.py 내 반복 스타일 딕셔너리
-3. **에러 핸들링**: 일부 예외 처리 미흡 (logging만 있음)
+### 6.2 인터페이스 동적 선택 ✅
+- 하드코딩 → 파라미터 기반 동적 목록
+- 연결 상태 버튼 즉시 반응
+
+### 6.3 알림/경보 시스템 ✅
+- `AlertManager` 클래스 (가용성<95%, 지터P99>100ms, 연결끊김 5초)
+- 토스트 알림 (DMC Notification)
+- 로그 파일 기록 (`logs/alerts.log`)
 
 ---
 
-## 4. 새로 추가된 기능 리뷰
-
-### 4.1 로그 필터링/검색
-
-| 항목 | 상태 |
-|------|------|
-| 파일 | `log_table.py`, `update_callbacks.py` |
-| 기능 | msg_code 필터, 상태 필터, 텍스트 검색 |
-| 품질 | ★★★★☆ |
-
-```python
-# filter_logs() 함수 - 깔끔한 필터링 로직
-def filter_logs(logs, msg_code_filter, status_filter, search_text):
-    ...
-```
-
-### 4.2 인터페이스 동적 선택
-
-| 항목 | 상태 |
-|------|------|
-| 파일 | `header.py` |
-| 기능 | 하드코딩 → 파라미터 기반 |
-| 품질 | ★★★★☆ |
-
-### 4.3 알림 시스템
-
-| 항목 | 상태 |
-|------|------|
-| 파일 | `alerts.py`, `alert_logger.py` |
-| 기능 | 가용성/지터/연결 조건 → 토스트 + 로그 |
-| 품질 | ★★★★★ |
-
-```python
-# AlertManager - SOLID 원칙 준수
-class AlertManager:
-    AVAILABILITY_THRESHOLD = 95.0
-    JITTER_P99_THRESHOLD = 100.0
-    DISCONNECT_THRESHOLD = 5.0
-    ...
-```
-
----
-
-## 5. 리팩토링 권장사항
-
-### 5.1 즉시 적용 가능 (Low Effort)
-
-| # | 항목 | 파일 | 예상 시간 |
-|---|------|------|----------|
-| 1 | 중복 스타일 상수화 | `panels.py` | 15분 |
-| 2 | 콜백 함수 분리 | `update_callbacks.py` | 20분 |
-| 3 | 에러 메시지 표준화 | 전체 | 10분 |
-
-### 5.2 중기 개선 (Medium Effort)
-
-| # | 항목 | 설명 | 예상 시간 |
-|---|------|------|----------|
-| 1 | 차트 컴포넌트 분리 | 현재 1파일 → 3파일 | 1시간 |
-| 2 | 설정 검증 강화 | Pydantic 검증 추가 | 30분 |
-| 3 | 로깅 구조화 | structlog 도입 | 1시간 |
-
-### 5.3 장기 개선 (Future)
-
-| # | 항목 | 이점 |
-|---|------|------|
-| 1 | WebSocket 전환 | 실시간성 향상 |
-| 2 | 대시보드 다중 페이지 | 확장성 |
-| 3 | DB 저장 | 히스토리 분석 |
-
----
-
-## 6. 종합 점수
+## 7. 종합 점수
 
 | 영역 | 점수 | 비고 |
 |------|------|------|
 | 아키텍처 | 9/10 | 명확한 분리 |
-| 코드 품질 | 8/10 | 일부 중복 |
-| 테스트 | 8/10 | 100% 통과 |
+| 코드 품질 | 8.5/10 | 버그 수정됨 |
+| 테스트 | 8/10 | 33개 100% 통과 |
 | 문서화 | 9/10 | 7개 문서 |
 | 확장성 | 8/10 | 모듈화 Good |
 | 보안 | 8/10 | debug=False |
 
-### **종합: 8.3/10** ✅ 현업 적용 가능
+### **종합: 8.4/10** ✅ 현업 적용 가능
 
 ---
 
-## 7. 결론
+## 8. 다음 작업
 
-### 강점
-- 깔끔한 아키텍처와 명확한 책임 분리
-- Mock/Live 추상화로 테스트 용이
-- 알림 시스템, 로그 필터링 등 실용적 기능
-
-### 개선 필요
-- 일부 파일의 코드 중복 정리
-- 차트 컴포넌트 세분화
-- 에러 핸들링 강화
-
-### 최종 평가
-> **현업 적용 가능한 수준의 프로젝트**. 추가적인 리팩토링은 기능 확장과 병행하여 점진적으로 진행 권장.
+| 우선순위 | 작업 | 상태 |
+|----------|------|------|
+| 높음 | VCS_Simulator 연동 테스트 | 대기 |
+| 중간 | 차트 확장 (P95/P99 오버레이) | 시뮬레이터 후 |
+| 낮음 | Print 중복 해결 | 선택적 |
 
 ---
 
-*작성: AI Code Reviewer*
+*최종 업데이트: 2026-01-29*

@@ -120,56 +120,20 @@ def create_communication_chart(
         col=1,
     )
     
-    # Update axes styling
-    # X-axis: 시간 레이블 개선 - 데이터 길이에 따라 동적으로 조정
-    # Calculate appropriate number of ticks based on time range
+    # Update axes styling - 루프로 통합
     if time_range_seconds <= 30:
-        n_ticks = 4  # 30초: 4개 틱
+        n_ticks = 4
     elif time_range_seconds <= 60:
-        n_ticks = 5  # 1분: 5개 틱
+        n_ticks = 5
     else:
-        n_ticks = 6  # 5분: 6개 틱
+        n_ticks = 6
     
-    fig.update_xaxes(
-        showgrid=True,
-        gridwidth=1,
-        gridcolor=colors["grid"],
-        nticks=n_ticks,
-        tickformat="%H:%M:%S",
-        tickangle=0,
-        title=None,  # Remove X-axis title to save space
-        row=1,
-        col=1,
-    )
-    fig.update_xaxes(
-        showgrid=True,
-        gridwidth=1,
-        gridcolor=colors["grid"],
-        nticks=n_ticks,
-        tickformat="%H:%M:%S",
-        tickangle=0,
-        title=None,  # Remove X-axis title to save space
-        row=2,
-        col=1,
-    )
+    x_axis_style = dict(showgrid=True, gridwidth=1, gridcolor=colors["grid"], nticks=n_ticks, tickformat="%H:%M:%S", tickangle=0, title=None)
+    y_axis_style = dict(showgrid=True, gridwidth=1, gridcolor=colors["grid"], rangemode="normal")
     
-    # Y-axis: 자동 스케일링 적용
-    fig.update_yaxes(
-        showgrid=True,
-        gridwidth=1,
-        gridcolor=colors["grid"],
-        rangemode="normal",  # 자동 스케일링
-        row=1,
-        col=1,
-    )
-    fig.update_yaxes(
-        showgrid=True,
-        gridwidth=1,
-        gridcolor=colors["grid"],
-        rangemode="normal",  # 자동 스케일링
-        row=2,
-        col=1,
-    )
+    for row in [1, 2]:
+        fig.update_xaxes(**x_axis_style, row=row, col=1)
+        fig.update_yaxes(**y_axis_style, row=row, col=1)
     
     # Layout configuration
     fig.update_layout(

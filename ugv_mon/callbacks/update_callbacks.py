@@ -29,19 +29,16 @@ class DataProviderProtocol(Protocol):
     def log_count(self) -> int: ...
 
 
-def register_callbacks(app, data_provider: DataProviderProtocol, alert_manager=None) -> None:
+def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     """모든 대시보드 콜백 등록."""
     if data_provider is None:
         raise ValueError("data_provider cannot be None")
     
     _register_data_callback(app, data_provider)
     _register_component_callback(app, data_provider)
+    _register_log_filter_callback(app, data_provider)  # 로그 필터 콜백 분리
     _register_control_callbacks(app, data_provider)
     _register_ui_callbacks(app, data_provider)
-    
-    # 알림 시스템 (선택적)
-    if alert_manager is not None:
-        _register_alert_callbacks(app, data_provider, alert_manager)
 
 
 def _register_data_callback(app, provider) -> None:
@@ -60,7 +57,7 @@ def _register_data_callback(app, provider) -> None:
 
 
 def _register_component_callback(app, provider) -> None:
-    """UI 컴포넌트 업데이트 콜백."""
+    """UI 컴포넌트 업데이트 콜백 (메인 폴링)."""
     @app.callback(
         [
             Output("status-chips", "children"),
@@ -70,27 +67,29 @@ def _register_component_callback(app, provider) -> None:
             Output("device-grid-container", "children"),
             Output("comm-quality-chart", "figure"),
             Output("availability-timeline", "figure"),
-            Output("log-table", "rowData"),
-            Output("log-table-title", "children"),
             Output("current-pps-display", "children"),
             Output("current-jitter-display", "children"),
+            # 버튼 상태도 폴링에서 업데이트
+            Output("connection-toggle-btn", "children"),
+            Output("connection-toggle-btn", "variant"),
+            Output("connection-toggle-btn", "color"),
         ],
         [
             Input("dashboard-data", "data"),
             Input("chart-time-range", "data"),
-            Input("log-filter-msgcode", "value"),
-            Input("log-filter-status", "value"),
-            Input("log-search-input", "value"),
         ],
     )
-    def update_components(data, time_range, msg_filter, status_filter, search_text):
+    def update_main_components(data, time_range):
+        """메인 데이터 폴링 콜백 - 차트/KPI/상태 업데이트."""
         chart_data = data.get("combinedData", [])
         latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
         
-        # Get logs and apply filters
-        logs = provider.get_logs(limit=50)
-        filtered_logs = filter_logs(logs, msg_filter or "all", status_filter or "all", search_text or "")
-        filter_info = f" (필터: {len(filtered_logs)}/{len(logs)})" if len(filtered_logs) != len(logs) else ""
+        # 버튼 상태 (provider의 실제 상태)
+        is_conn = getattr(provider, '_is_connected', False)
+        btn_children = [
+            html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
+            html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
+        ]
         
         return (
             create_status_chips(data),
@@ -100,10 +99,38 @@ def _register_component_callback(app, provider) -> None:
             create_device_grid(data.get("devices", [])),
             create_communication_chart(chart_data, data.get("jitterP95", 0), data.get("jitterP99", 0), time_range or 60),
             create_availability_timeline(data.get("availabilitySegments", [])),
-            filtered_logs,
-            f"로그/이벤트 테이블 (최근 {provider.log_count}개){filter_info}",
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
+            # 버튼 상태
+            btn_children,
+            "filled" if is_conn else "outline",
+            "green" if is_conn else "red",
+        )
+
+
+def _register_log_filter_callback(app, provider) -> None:
+    """로그 테이블 필터링 콜백 (분리됨)."""
+    @app.callback(
+        [
+            Output("log-table", "rowData"),
+            Output("log-table-title", "children"),
+        ],
+        [
+            Input("dashboard-data", "data"),
+            Input("log-filter-msgcode", "value"),
+            Input("log-filter-status", "value"),
+            Input("log-search-input", "value"),
+        ],
+    )
+    def update_log_table(data, msg_filter, status_filter, search_text):
+        """로그 테이블 업데이트 - 필터링만 담당."""
+        logs = provider.get_logs(limit=50)
+        filtered_logs = filter_logs(logs, msg_filter or "all", status_filter or "all", search_text or "")
+        filter_info = f" (필터: {len(filtered_logs)}/{len(logs)})" if len(filtered_logs) != len(logs) else ""
+        
+        return (
+            filtered_logs,
+            f"로그/이벤트 테이블 (최근 {provider.log_count}개){filter_info}",
         )
 
 
@@ -145,44 +172,32 @@ def _register_ui_callbacks(app, provider) -> None:
             return provider.update_data(current_data)
         raise PreventUpdate
     
+    # 연결 토글 버튼 - 버튼 상태만 반환 (data 업데이트는 분리)
     @app.callback(
-        [Output("dashboard-data", "data", allow_duplicate=True), Output("connection-toggle-btn", "children", allow_duplicate=True), Output("connection-toggle-btn", "variant", allow_duplicate=True), Output("connection-toggle-btn", "color", allow_duplicate=True)],
-        Input("connection-toggle-btn", "n_clicks"), State("dashboard-data", "data"), prevent_initial_call=True,
-    )
-    def on_connection_toggle(n_clicks, current_data):
-        if not hasattr(provider, 'toggle_connection'):
-            raise PreventUpdate
-        if provider.toggle_connection():
-            is_conn = getattr(provider, '_is_connected', False)
-            return (
-                provider.update_data(current_data),
-                [html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}), html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"})],
-                "filled" if is_conn else "outline",
-                "green" if is_conn else "red",
-            )
-        logger.error("Failed to toggle connection")
-        raise PreventUpdate
-
-
-def _register_alert_callbacks(app, provider, alert_manager) -> None:
-    """알림 시스템 콜백."""
-    from ..components.alerts import create_toast_notification
-    from ..utils.alert_logger import log_alert
-    
-    @app.callback(
-        Output("alert-store", "data"),
-        Input("dashboard-data", "data"),
+        [
+            Output("connection-toggle-btn", "children", allow_duplicate=True),
+            Output("connection-toggle-btn", "variant", allow_duplicate=True),
+            Output("connection-toggle-btn", "color", allow_duplicate=True),
+        ],
+        Input("connection-toggle-btn", "n_clicks"),
         prevent_initial_call=True,
     )
-    def check_alerts(data):
-        """데이터 업데이트 시 알림 조건 체크."""
-        alerts = alert_manager.check_conditions(data)
+    def on_connection_toggle(n_clicks):
+        if not hasattr(provider, 'toggle_connection'):
+            raise PreventUpdate
         
-        # 로그 파일에 기록
-        for alert in alerts:
-            log_alert(alert)
-            logger.warning(f"Alert: {alert.title} - {alert.message}")
+        is_conn = provider.toggle_connection()
         
-        # 알림 props 반환
-        return [create_toast_notification(a) for a in alerts]
+        btn_text = "연결됨" if is_conn else "연결끊김"
+        btn_children = [
+            html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
+            html.Span(btn_text, style={"fontSize": "12px", "fontWeight": "600"}),
+        ]
+        
+        return (
+            btn_children,
+            "filled" if is_conn else "outline",
+            "green" if is_conn else "red",
+        )
+
 

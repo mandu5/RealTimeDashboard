@@ -289,7 +289,7 @@ def filter_logs(logs: List[Dict], msg_code_filter: str, status_filter: str, sear
         logs: List of log dictionaries
         msg_code_filter: 'all' or specific msg_code like '0x01'
         status_filter: 'all', 'success', or 'error'
-        search_text: Text to search in notes field
+        search_text: Text to search in all searchable fields
         
     Returns:
         Filtered list of logs
@@ -306,10 +306,14 @@ def filter_logs(logs: List[Dict], msg_code_filter: str, status_filter: str, sear
     elif status_filter == "error":
         filtered = [log for log in filtered if log.get("parse_ok") == "✗" or log.get("checksum_ok") == "✗"]
     
-    # Search filter (notes field)
+    # Search filter (전체 필드에서 검색)
     if search_text:
         search_lower = search_text.lower()
-        filtered = [log for log in filtered if search_lower in log.get("notes", "").lower()]
+        searchable_fields = ["time", "msg_code", "mode", "authority", "notes"]
+        filtered = [
+            log for log in filtered
+            if any(search_lower in str(log.get(field, "")).lower() for field in searchable_fields)
+        ]
     
     return filtered
 
