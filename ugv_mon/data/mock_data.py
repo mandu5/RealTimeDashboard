@@ -65,7 +65,7 @@ class MockDataGenerator:
         return {
             "connected": True,
             "interface": config.network.interface,
-            "filter": f"{config.network.source_port}→{config.network.dest_port}",
+            "filter": f"{config.network.vic_port}→{config.network.ocs_port}",
             "lastPacketTime": now.strftime("%H:%M:%S"),
             "capturePps": 1024,
             "parseSuccess": 100.0,

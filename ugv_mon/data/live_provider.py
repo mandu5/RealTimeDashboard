@@ -244,14 +244,33 @@ class LiveDataProvider:
         stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
         self._chart_data.append({"timestamp": now.strftime("%H:%M:%S"), "pps": stats.get("pps", 0), "jitter": stats.get("jitter_avg", 0.0)})
 
+    # =========================================================================
+    # 상태 빌드 (리팩토링됨)
+    # =========================================================================
+
     def _build_state(self, devices: list) -> Dict:
-        stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
+        """전체 대시보드 상태 빌드."""
+        return {
+            **self._build_connection_state(),
+            **self._build_stats_state(),
+            **self._build_operational_state(),
+            **self._build_ui_state(devices),
+        }
+
+    def _build_connection_state(self) -> Dict:
+        """연결 상태 관련 필드."""
         return {
             "connected": self._is_connected,
             "interface": self._interface,
-            "direction": self._current_direction,  # 4주차 금요일 추가
+            "direction": self._current_direction,
             "filter": f"{self._src_port}→{self._dst_port}",
             "lastPacketTime": self._last_packet_time.strftime("%H:%M:%S") if self._last_packet_time else "",
+        }
+
+    def _build_stats_state(self) -> Dict:
+        """통계 관련 필드."""
+        stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
+        return {
             "capturePps": stats.get("pps", 0),
             "parseSuccess": round((self._parse_success / max(self._total_packets, 1)) * 100, 1),
             "checksumFail": round((self._checksum_fail / max(self._total_packets, 1)) * 100, 1),
@@ -259,13 +278,22 @@ class LiveDataProvider:
             "availability5min": stats.get("availability", 0.0),
             "jitterP95": stats.get("jitter_p95", 0.0),
             "jitterP99": stats.get("jitter_p99", 0.0),
-            # 페이로드 기반 상태 - ICD 명세 확정 전까지 기본값
+        }
+
+    def _build_operational_state(self) -> Dict:
+        """운용 상태 필드 (ICD 명세 확정 전까지 기본값)."""
+        return {
             "operationalMode": "--- (ICD 미확정)",
-            "operationalAuthority": "--- (ICD 미확정)", 
+            "operationalAuthority": "--- (ICD 미확정)",
             "drivingState": "--- (ICD 미확정)",
+            "emergencyStatus": EmergencyStatus().to_dict(),
+        }
+
+    def _build_ui_state(self, devices: list) -> Dict:
+        """UI 렌더링용 필드."""
+        return {
             "combinedData": list(self._chart_data),
             "devices": devices if devices else [{"name": n, "connected": False} for n in DEVICE_NAMES],
-            "emergencyStatus": EmergencyStatus().to_dict(),
             "availabilitySegments": [{"start": 0, "end": config.ui.timeline_duration_sec, "isUp": self._is_connected}],
         }
 

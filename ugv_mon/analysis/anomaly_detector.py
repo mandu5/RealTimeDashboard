@@ -97,8 +97,8 @@ class AnomalyDetector:
         return None
 
     def check_packet_loss(self, prev_seq: int, curr_seq: int) -> Optional[Anomaly]:
-        """패킷 손실 탐지."""
-        gap = curr_seq - prev_seq if curr_seq >= prev_seq else (256 - prev_seq) + curr_seq
+        """패킷 손실 탐지 (4비트 sequence: 0~15)."""
+        gap = (curr_seq - prev_seq) % 16  # 4비트 롤오버
         if gap > 1:
             lost = gap - 1
             anomaly = Anomaly(
