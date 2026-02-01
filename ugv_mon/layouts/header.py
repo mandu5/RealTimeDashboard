@@ -44,6 +44,7 @@ def create_status_chips(data: Dict, available_interfaces: List[str] = None) -> l
     """헤더 상태 칩들 생성."""
     is_connected = data.get("connected", False)
     current_interface = data.get("interface", "lo")
+    current_direction = data.get("direction", "status")  # 4주차 금요일 추가
     
     # 동적 인터페이스 목록 또는 기본값
     if available_interfaces is None:
@@ -54,6 +55,14 @@ def create_status_chips(data: Dict, available_interfaces: List[str] = None) -> l
     for iface in available_interfaces:
         label = f"{iface} (Local)" if iface in ["lo", "lo0"] else iface
         interface_options.append({"value": iface, "label": label})
+    
+    # 방향 라벨
+    if current_direction == "status":
+        dir_label = "상태(50000→61000)"
+        dir_color = "blue"
+    else:
+        dir_label = "제어(61000→50000)"
+        dir_color = "orange"
     
     return [
         # 연결상태 토글 버튼
@@ -68,6 +77,18 @@ def create_status_chips(data: Dict, available_interfaces: List[str] = None) -> l
             size="xs",
             style={"minWidth": "120px", "height": "32px", "padding": "6px 12px"},
         ),
+        # 방향 전환 버튼 (4주차 금요일 추가)
+        dmc.Button(
+            children=[
+                html.Span("방향", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
+                html.Span(dir_label, style={"fontSize": "12px", "fontWeight": "600"}),
+            ],
+            id="direction-toggle-btn",
+            variant="filled",
+            color=dir_color,
+            size="xs",
+            style={"minWidth": "150px", "height": "32px", "padding": "6px 12px"},
+        ),
         # 인터페이스 드롭다운 (동적 목록)
         dmc.Select(
             id="interface-select",
@@ -78,7 +99,6 @@ def create_status_chips(data: Dict, available_interfaces: List[str] = None) -> l
             searchable=False,
             clearable=False,
         ),
-        create_status_chip("필터", data.get("filter", "---"), "default", min_width="100px"),
         create_status_chip("마지막 패킷", data.get("lastPacketTime", "---"), "info", min_width="140px"),
     ]
 

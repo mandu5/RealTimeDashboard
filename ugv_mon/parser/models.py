@@ -14,6 +14,7 @@ class MsgCode(IntEnum):
     명세 확정 시 의미 있는 이름으로 변경 예정.
     """
     TYPE_01 = 0x01
+    REMOTE_CONTROL = 0x10  # 원격 제어 메시지 (61000→50000, 80~110Hz)
     TYPE_25 = 0x25
     TYPE_40 = 0x40
 

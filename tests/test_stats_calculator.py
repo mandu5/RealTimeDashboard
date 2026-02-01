@@ -252,12 +252,13 @@ class TestSequenceGap:
         assert gap == 5
 
     def test_rollover_gap(self):
-        """롤오버 갭."""
-        gap = self.calc._seq_gap(255, 0)
+        """4비트 롤오버 갭 (15 → 0)."""
+        gap = self.calc._seq_gap(15, 0)
+        # (0 - 15) % 16 = 1
         assert gap == 1
 
     def test_rollover_with_extra(self):
-        """롤오버 + 추가 갭."""
-        gap = self.calc._seq_gap(250, 5)
-        # (256 - 250) + 5 = 11
-        assert gap == 11
+        """4비트 롤오버 + 추가 갭 (14 → 3)."""
+        gap = self.calc._seq_gap(14, 3)
+        # (3 - 14) % 16 = 5
+        assert gap == 5

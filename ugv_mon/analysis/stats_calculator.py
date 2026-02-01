@@ -30,6 +30,7 @@ class StatsCalculator:
     
     수정 이력:
     - 2026-01-29: window_sec 60→300 변경, 가용성 계산 개선
+    - 2026-01-31: msg_code별 sequence 추적, 4비트(0~15) packet loss
     """
 
     def __init__(self, window_sec: int = 300):  # 5분으로 변경
@@ -38,23 +39,26 @@ class StatsCalculator:
         self._last_timestamp: Optional[datetime] = None
         self._last_sequence: Optional[int] = None
         self._last_interval: Optional[float] = None
-        self._max_sequence = MAX_SEQUENCE
+        self._max_sequence = 16  # 4비트: 0~15 (변경됨)
         self._lock = threading.Lock()
         
-        # msg_code별 마지막 timestamp/interval 저장
+        # msg_code별 마지막 timestamp/interval/sequence 저장
         self._last_by_code: Dict[int, Dict] = {}
+        # msg_code별 packet loss 누적
+        self._loss_by_code: Dict[int, int] = {}
 
     def record_packet(self, timestamp: datetime, sequence: int, size: int, msg_code: int = 0) -> Optional[float]:
         """패킷 기록 및 지터 반환."""
         with self._lock:
             jitter_ms = None
             
-            # msg_code별로 지터 계산
+            # msg_code별로 지터/sequence 계산
             if msg_code not in self._last_by_code:
-                self._last_by_code[msg_code] = {"timestamp": None, "interval": None}
+                self._last_by_code[msg_code] = {"timestamp": None, "interval": None, "sequence": None}
             
             code_data = self._last_by_code[msg_code]
             
+            # 지터 계산 (msg_code별)
             if code_data["timestamp"] is not None:
                 interval_ms = (timestamp - code_data["timestamp"]).total_seconds() * 1000
                 
@@ -64,7 +68,17 @@ class StatsCalculator:
                 
                 code_data["interval"] = interval_ms
             
-            code_data["timestamp"] = timestamp
+            code_data["timestamp"] = timestamp  # 반드시 저장 (지터 0 문제 해결)
+            
+            # packet loss 계산 (msg_code별, 4비트 sequence)
+            if code_data["sequence"] is not None:
+                gap = self._seq_gap(code_data["sequence"], sequence)
+                if gap > 1:
+                    if msg_code not in self._loss_by_code:
+                        self._loss_by_code[msg_code] = 0
+                    self._loss_by_code[msg_code] += (gap - 1)
+            
+            code_data["sequence"] = sequence
 
             self._records.append(PacketRecord(timestamp, sequence, size, jitter_ms))
             self._last_timestamp = timestamp
@@ -92,26 +106,19 @@ class StatsCalculator:
             return (round(p95, 2), round(p99, 2))
 
     def get_packet_loss(self) -> int:
-        """패킷 손실 추정."""
+        """패킷 손실 (msg_code별 누적합)."""
         with self._lock:
-            if len(self._records) < 2:
-                return 0
-
-            total_loss = 0
-            records_list = list(self._records)
-            for i in range(1, len(records_list)):
-                prev_seq = records_list[i - 1].sequence
-                curr_seq = records_list[i].sequence
-                gap = self._seq_gap(prev_seq, curr_seq)
-                if gap > 1:
-                    total_loss += (gap - 1)
-            return total_loss
+            return sum(self._loss_by_code.values())
 
     def _seq_gap(self, prev_seq: int, curr_seq: int) -> int:
-        """롤오버 고려한 시퀀스 갭."""
-        if curr_seq >= prev_seq:
-            return curr_seq - prev_seq
-        return (self._max_sequence - prev_seq) + curr_seq
+        """4비트(0~15) 롤오버 고려한 시퀀스 갭."""
+        prev_seq = prev_seq & 0x0F
+        curr_seq = curr_seq & 0x0F
+        diff = (curr_seq - prev_seq) % 16
+        # 너무 큰 점프(8 이상)는 재시작으로 간주하고 손실로 세지 않음
+        if diff > 8:
+            return 1  # 점프지만 손실 아님
+        return diff
 
     def get_availability(self, window_sec: Optional[int] = None) -> float:
         """
