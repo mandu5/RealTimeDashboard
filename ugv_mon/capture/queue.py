@@ -31,12 +31,12 @@ class PacketQueue:
             self._queue.append(packet)
             self._last_put_time = datetime.now()
 
-    def get(self) -> Optional[bytes]:
+    def get(self) -> Optional[Tuple[datetime, bytes]]:
         """패킷 하나 꺼내기."""
         with self._lock:
             return self._queue.popleft() if self._queue else None
 
-    def get_all(self) -> List[bytes]:
+    def get_all(self) -> List[Tuple[datetime, bytes]]:
         """모든 패킷 꺼내기."""
         with self._lock:
             packets = list(self._queue)

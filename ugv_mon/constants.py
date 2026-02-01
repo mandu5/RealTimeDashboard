@@ -18,7 +18,7 @@ DEVICE_ID_TO_NAME: Dict[str, str] = dict(zip(DEVICE_IDS, DEVICE_NAMES))
 # 시퀀스/패킷 관련 상수
 # =============================================================================
 
-MAX_SEQUENCE: int = 256              # 시퀀스 번호 최대값 (8비트)
+SEQ_MODULO: int = 16                 # 시퀀스 번호 모듈로 (4비트: 0~15)
 DEFAULT_INITIAL_SEQUENCE: int = 49195  # Mock 모드 초기값
 EXPECTED_PPS: int = 1000             # 예상 PPS
 

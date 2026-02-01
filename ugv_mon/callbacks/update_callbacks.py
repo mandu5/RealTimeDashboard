@@ -200,9 +200,12 @@ def _register_ui_callbacks(app, provider) -> None:
             "green" if is_conn else "red",
         )
     
-    # 방향 전환 버튼 (4주차 금요일 추가)
+    # 방향 전환 버튼 (children + color 통합)
     @app.callback(
-        Output("direction-toggle-btn", "children", allow_duplicate=True),
+        [
+            Output("direction-toggle-btn", "children", allow_duplicate=True),
+            Output("direction-toggle-btn", "color", allow_duplicate=True),
+        ],
         Input("direction-toggle-btn", "n_clicks"),
         prevent_initial_call=True,
     )
@@ -212,24 +215,13 @@ def _register_ui_callbacks(app, provider) -> None:
         
         direction = provider.toggle_direction()
         
-        if direction == "status":
-            label = "상태(50000→61000)"
-        else:
-            label = "제어(61000→50000)"
+        label = "상태(50000→61000)" if direction == "status" else "제어(61000→50000)"
+        color = "blue" if direction == "status" else "orange"
         
-        return [
+        children = [
             html.Span("방향", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
             html.Span(label, style={"fontSize": "12px", "fontWeight": "600"}),
         ]
-    
-    # 방향 버튼 색상 업데이트 (별도 콜백)
-    @app.callback(
-        [
-            Output("direction-toggle-btn", "color", allow_duplicate=True),
-        ],
-        Input("direction-toggle-btn", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    def update_direction_color(n_clicks):
-        direction = getattr(provider, '_current_direction', 'status')
-        return ("orange" if direction == "control" else "blue",)
+        
+        return children, color
+

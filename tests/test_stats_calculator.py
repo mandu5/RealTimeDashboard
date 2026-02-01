@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ugv_mon.analysis.stats_calculator import StatsCalculator, PacketRecord
-from ugv_mon.constants import MAX_SEQUENCE, EXPECTED_PPS
+from ugv_mon.constants import SEQ_MODULO, EXPECTED_PPS
 
 
 class TestStatsCalculatorBasic:
@@ -96,7 +96,7 @@ class TestJitterCalculation:
         self.calc.record_packet(now, sequence=0, size=100, msg_code=1)
         for i in range(100):
             now += timedelta(milliseconds=10)
-            self.calc.record_packet(now, sequence=(i+1) % MAX_SEQUENCE, size=100, msg_code=1)
+            self.calc.record_packet(now, sequence=(i+1) % SEQ_MODULO, size=100, msg_code=1)
         
         p95, p99 = self.calc.get_jitter_percentiles()
         
@@ -204,7 +204,7 @@ class TestAvailabilityCalculation:
         
         # 매우 많은 패킷 (비현실적으로 높은 PPS)
         for i in range(10000):
-            self.calc.record_packet(now - timedelta(milliseconds=i), sequence=i % MAX_SEQUENCE, size=100)
+            self.calc.record_packet(now - timedelta(milliseconds=i), sequence=i % SEQ_MODULO, size=100)
         
         avail = self.calc.get_availability()
         

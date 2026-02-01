@@ -42,13 +42,35 @@ def create_operational_status_panel(data: Dict) -> dmc.Card:
 
 def create_operational_status_boxes(data: Dict) -> List:
     """운용 상태 3개 박스 생성."""
+    # 상태별 스타일 설정 (styles.py COLORS 사용)
+    STATUS_STYLES = {
+        "mode": {
+            "label_color": COLORS["success_dark"],
+            "value_color": "#064e3b",
+            "bg": COLORS["bg_success"],
+            "border": "#a7f3d0",
+        },
+        "authority": {
+            "label_color": COLORS["primary"],
+            "value_color": COLORS["primary_dark"],
+            "bg": COLORS["bg_info"],
+            "border": "#bfdbfe",
+        },
+        "driving": {
+            "label_color": COLORS["text_muted"],
+            "value_color": COLORS["text_dark"],
+            "bg": COLORS["bg_neutral"],
+            "border": COLORS["border"],
+        },
+    }
+    
     configs = [
-        ("운용모드", data.get("operationalMode", "---"), "#059669", "#064e3b", COLORS["bg_success"], "#a7f3d0"),
-        ("운용권한", data.get("operationalAuthority", "---"), "#2563eb", "#1e3a8a", COLORS["bg_info"], "#bfdbfe"),
-        ("주행상태", data.get("drivingState", "---"), "#475569", "#0f172a", COLORS["bg_neutral"], "#e2e8f0"),
+        ("운용모드", data.get("operationalMode", "---"), STATUS_STYLES["mode"]),
+        ("운용권한", data.get("operationalAuthority", "---"), STATUS_STYLES["authority"]),
+        ("주행상태", data.get("drivingState", "---"), STATUS_STYLES["driving"]),
     ]
-    return [_status_box(label, value, label_color, value_color, bg, border) 
-            for label, value, label_color, value_color, bg, border in configs]
+    
+    return [_status_box(label, value, **style) for label, value, style in configs]
 
 
 def _status_box(label: str, value: str, label_color: str, value_color: str, bg: str, border: str) -> html.Div:

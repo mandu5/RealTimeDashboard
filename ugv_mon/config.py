@@ -25,9 +25,7 @@ class AppConfig:
 class NetworkConfig:
     """네트워크 캡처 설정."""
     interface: str = "lo"
-    source_port: int = 50000
-    dest_port: int = 61000
-    # 양방향 캡처용 포트 (4주차 금요일 추가)
+    # 양방향 캡처용 포트 (4주차 금요일)
     vic_port: int = 50000   # VIC → OCS (상태 메시지)
     ocs_port: int = 61000   # OCS → VIC (제어 메시지)
 

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 import threading
 
-from ..constants import MAX_SEQUENCE, EXPECTED_PPS
+from ..constants import SEQ_MODULO, EXPECTED_PPS
 
 
 @dataclass
