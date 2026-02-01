@@ -164,7 +164,7 @@ def _register_control_callbacks(app, provider) -> None:
 
 
 def _register_ui_callbacks(app, provider) -> None:
-    """UI 제어 콜백 (인터페이스 전환, 연결 토글)."""
+    """UI 제어 콜백 (인터페이스 전환, 연결 토글, 방향 전환)."""
     @app.callback(Output("dashboard-data", "data", allow_duplicate=True), Input("interface-select", "value"), State("dashboard-data", "data"), prevent_initial_call=True)
     def on_interface_change(new_interface, current_data):
         if hasattr(provider, 'switch_interface') and provider.switch_interface(new_interface):
@@ -199,5 +199,37 @@ def _register_ui_callbacks(app, provider) -> None:
             "filled" if is_conn else "outline",
             "green" if is_conn else "red",
         )
-
-
+    
+    # 방향 전환 버튼 (4주차 금요일 추가)
+    @app.callback(
+        Output("direction-toggle-btn", "children", allow_duplicate=True),
+        Input("direction-toggle-btn", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def on_direction_toggle(n_clicks):
+        if not hasattr(provider, 'toggle_direction'):
+            raise PreventUpdate
+        
+        direction = provider.toggle_direction()
+        
+        if direction == "status":
+            label = "상태(50000→61000)"
+        else:
+            label = "제어(61000→50000)"
+        
+        return [
+            html.Span("방향", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
+            html.Span(label, style={"fontSize": "12px", "fontWeight": "600"}),
+        ]
+    
+    # 방향 버튼 색상 업데이트 (별도 콜백)
+    @app.callback(
+        [
+            Output("direction-toggle-btn", "color", allow_duplicate=True),
+        ],
+        Input("direction-toggle-btn", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def update_direction_color(n_clicks):
+        direction = getattr(provider, '_current_direction', 'status')
+        return ("orange" if direction == "control" else "blue",)

@@ -31,12 +31,23 @@ except ImportError as e:
 
 
 class LiveDataProvider:
-    """실시간 데이터 제공자 (헤더 기반)."""
+    """실시간 데이터 제공자 (헤더 기반).
+    
+    4주차 금요일 추가: 양방향 캡처 (상태/제어 메시지 전환)
+    """
 
     def __init__(self, interface: str = None):
         self._interface = interface or os.getenv("UGV_MON_INTERFACE") or config.network.interface
-        self._src_port = config.network.source_port
-        self._dst_port = config.network.dest_port
+        
+        # 양방향 캡처용 포트 (4주차 금요일 추가)
+        self._vic_port = config.network.vic_port   # 50000
+        self._ocs_port = config.network.ocs_port   # 61000
+        
+        # 현재 캡처 방향 ("status" or "control")
+        self._current_direction = "status"
+        self._src_port = self._vic_port  # 기본: 50000 (상태)
+        self._dst_port = self._ocs_port  # 기본: 61000
+        
         self._lock = Lock()
         
         # 캡처 컴포넌트
@@ -77,7 +88,7 @@ class LiveDataProvider:
             self._sniffer = PacketSniffer(self._interface, self._src_port, self._dst_port, self._packet_queue.put)
             self._sniffer.start()
             self._is_connected = True
-            logger.info(f"Capture started on: {self._interface}")
+            logger.info(f"Capture started on: {self._interface} ({self._src_port}→{self._dst_port})")
             return True
         except (PermissionError, OSError) as e:
             logger.error(f"Capture failed: {e}")
@@ -118,6 +129,44 @@ class LiveDataProvider:
                 self.stop_capture()
                 return False
             return self.start_capture()
+
+    def toggle_direction(self) -> str:
+        """캡처 방향 전환 (상태 ↔ 제어 메시지).
+        
+        Returns:
+            새로운 방향 ("status" or "control")
+        """
+        with self._lock:
+            # 현재 캡처 중지
+            if self._sniffer:
+                self.stop_capture()
+            
+            # 방향 전환
+            if self._current_direction == "status":
+                self._current_direction = "control"
+                self._src_port = self._ocs_port  # 61000
+                self._dst_port = self._vic_port  # 50000
+            else:
+                self._current_direction = "status"
+                self._src_port = self._vic_port  # 50000
+                self._dst_port = self._ocs_port  # 61000
+            
+            logger.info(f"Direction changed: {self._current_direction} ({self._src_port}→{self._dst_port})")
+            
+            # 통계 초기화 (방향별로 새로 시작)
+            if self._stats_calc:
+                self._stats_calc.reset()
+            
+            # 기존 연결 상태였으면 다시 시작
+            if self._is_connected:
+                self.start_capture()
+            
+            return self._current_direction
+
+    @property
+    def current_direction(self) -> str:
+        """현재 캡처 방향 반환."""
+        return self._current_direction
 
     def get_available_interfaces(self) -> List[str]:
         try:
@@ -200,6 +249,7 @@ class LiveDataProvider:
         return {
             "connected": self._is_connected,
             "interface": self._interface,
+            "direction": self._current_direction,  # 4주차 금요일 추가
             "filter": f"{self._src_port}→{self._dst_port}",
             "lastPacketTime": self._last_packet_time.strftime("%H:%M:%S") if self._last_packet_time else "",
             "capturePps": stats.get("pps", 0),

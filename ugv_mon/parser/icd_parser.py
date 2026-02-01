@@ -75,7 +75,7 @@ class ICDParser:
     
         return ICDHeader(
             timestamp=struct.unpack('<I', data[0:4])[0],
-            sequence=data[3],
+            sequence=data[3] & 0x0F,  # 하위 4비트만 사용 (0~15 반복)
             source_id=safe_enum(DeviceID, data[4]),
             dest_id=safe_enum(DeviceID, data[5]),
             msg_code=safe_enum(MsgCode, data[6]),

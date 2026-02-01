@@ -95,13 +95,14 @@ class TestICDParserHeader:
         assert result.header.timestamp == 0x04030201
 
     def test_parse_sequence_from_timestamp(self):
-        """시퀀스 번호 파싱."""
+        """시퀀스 번호 파싱 (4비트: 0~15)."""
         header = bytes([0x00, 0x00, 0x00, 0x7F, 0xB1, 0xA2, 0x01, 0xFF, 0x00, 0x00, 0x00, 0x00])
         packet = self._create_packet(header)
         
         result = self.parser.parse(packet)
         
-        assert result.header.sequence == 127
+        # 0x7F & 0x0F = 15 (하위 4비트만 사용)
+        assert result.header.sequence == 15
 
     def test_parse_source_dest_ids(self):
         """소스/목적지 ID 파싱."""
