@@ -68,18 +68,18 @@ class StatsCalculator:
                 
                 if interval_ms > MAX_GAP_MS:
                     # 큰 갭: 스트림 재시작으로 간주, 지터 계산 스킵
-                    code_data["interval"] = None
+                    code_data["interval"] = None  # interval도 리셋!
                     jitter_ms = None
                 elif self._global_skip_count > 0:
                     # 포트 전환 후 전역 스킵 (모든 msg_code에 적용)
                     self._global_skip_count -= 1
-                    code_data["interval"] = interval_ms
+                    code_data["interval"] = None  # interval도 리셋! (버그 수정)
                     jitter_ms = None
                 else:
                     if code_data["interval"] is not None:
                         # 지터 = |현재 간격 - 이전 간격|
                         jitter_ms = abs(interval_ms - code_data["interval"])
-                    code_data["interval"] = interval_ms
+                    code_data["interval"] = interval_ms  # 정상 케이스에서만 interval 저장
             
             code_data["timestamp"] = timestamp  # 반드시 저장 (지터 0 문제 해결)
             
