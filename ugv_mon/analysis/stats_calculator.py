@@ -46,6 +46,8 @@ class StatsCalculator:
         self._last_by_code: Dict[int, Dict] = {}
         # msg_code별 packet loss 누적
         self._loss_by_code: Dict[int, int] = {}
+        # 전역 지터 스킵 카운터 (포트 전환 후 첫 N개 샘플 스킵)
+        self._global_skip_count: int = 0
 
     def record_packet(self, timestamp: datetime, sequence: int, size: int, msg_code: int = 0) -> Optional[float]:
         """패킷 기록 및 지터 반환."""
@@ -58,7 +60,7 @@ class StatsCalculator:
             
             code_data = self._last_by_code[msg_code]
             
-            # 지터 계산 (msg_code별) - 5주차 월요일: 큰 gap 스킵 로직 추가
+            # 지터 계산 (msg_code별) - 5주차: 큰 gap 스킵 + 전역 스킵 카운터
             MAX_GAP_MS = 3000  # 3초 이상 갭은 스트림 재시작으로 간주
             
             if code_data["timestamp"] is not None:
@@ -67,6 +69,11 @@ class StatsCalculator:
                 if interval_ms > MAX_GAP_MS:
                     # 큰 갭: 스트림 재시작으로 간주, 지터 계산 스킵
                     code_data["interval"] = None
+                    jitter_ms = None
+                elif self._global_skip_count > 0:
+                    # 포트 전환 후 전역 스킵 (모든 msg_code에 적용)
+                    self._global_skip_count -= 1
+                    code_data["interval"] = interval_ms
                     jitter_ms = None
                 else:
                     if code_data["interval"] is not None:
@@ -207,10 +214,18 @@ class StatsCalculator:
             self._last_interval = None
             self._last_by_code.clear()
             self._loss_by_code.clear()
+            self._global_skip_count = 0
 
-    def reset_stream_state(self, clear_records: bool = False) -> None:
-        """스트림 상태만 리셋 (방향 전환 시 호출)."""
+    def reset_stream_state(self, clear_records: bool = False, skip_samples: int = 3) -> None:
+        """스트림 상태만 리셋 (방향 전환 시 호출).
+        
+        Args:
+            clear_records: 기록도 삭제할지 여부
+            skip_samples: 리셋 후 스킵할 지터 샘플 수 (기본 3)
+        """
         with self._lock:
+            # 전역 스킵 카운터 설정 (모든 msg_code에 적용)
+            self._global_skip_count = skip_samples
             self._last_by_code.clear()
             self._loss_by_code.clear()
             if clear_records:

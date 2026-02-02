@@ -61,6 +61,7 @@ class LiveDataProvider:
         self._chart_data: deque = deque(maxlen=config.ui.max_chart_points)
         self._is_connected = False
         self._last_packet_time: Optional[datetime] = None
+        self._last_payload = None  # 5주차: 마지막 파싱된 운용 상태 페이로드
         
         # 통계
         self._total_packets = 0
@@ -223,12 +224,24 @@ class LiveDataProvider:
                 result.header.msg_code  # msg_code 추가
             )
         
-        # 로그 추가 (헤더 정보만)
+        # 페이로드 저장 (5주차: 운용 상태 UI 연동)
+        if result.payload:
+            self._last_payload = result.payload
+        
+        # 로그 추가 (헤더 + 페이로드 정보)
         seq = result.header.sequence if result.header else 0
         msg = f"0x{result.header.msg_code:02X}" if result.header else "???"
+        
+        # 페이로드에서 운용 정보 추출
+        mode = "---"
+        authority = "---"
+        if result.payload:
+            mode = result.payload.operation_mode
+            authority = result.payload.authority
+        
         self._logs.appendleft(LogEntry(
             capture_time, seq, msg, result.success, result.checksum_ok,
-            "---", "---",  # 운용 상태는 페이로드 파싱 필요하므로 미표시
+            mode, authority,
             "" if result.success else (result.error or "파싱 실패")
         ))
         self._last_packet_time = capture_time
@@ -276,24 +289,46 @@ class LiveDataProvider:
             "checksumFail": round((self._checksum_fail / max(self._total_packets, 1)) * 100, 1),
             "packetLoss": stats.get("packet_loss", 0),
             "availability5min": stats.get("availability", 0.0),
+            "jitterCurrent": stats.get("jitter_current", 0.0),  # 5주차: 추가
             "jitterP95": stats.get("jitter_p95", 0.0),
             "jitterP99": stats.get("jitter_p99", 0.0),
         }
 
     def _build_operational_state(self) -> Dict:
-        """운용 상태 필드 (ICD 명세 확정 전까지 기본값)."""
-        return {
-            "operationalMode": "--- (ICD 미확정)",
-            "operationalAuthority": "--- (ICD 미확정)",
-            "drivingState": "--- (ICD 미확정)",
-            "emergencyStatus": EmergencyStatus().to_dict(),
-        }
+        """운용 상태 필드 (페이로드 기반)."""
+        if self._last_payload:
+            p = self._last_payload
+            return {
+                "operationalMode": p.operation_mode,
+                "operationalAuthority": p.authority,
+                "drivingState": p.driving_state,
+                "emergencyStatus": {
+                    "sources": p.emergency_sources,
+                    "complete": p.emergency_complete,
+                },
+            }
+        else:
+            return {
+                "operationalMode": "--- (대기 중)",
+                "operationalAuthority": "--- (대기 중)",
+                "drivingState": "--- (대기 중)",
+                "emergencyStatus": EmergencyStatus().to_dict(),
+            }
 
     def _build_ui_state(self, devices: list) -> Dict:
         """UI 렌더링용 필드."""
+        # 페이로드에서 장치 상태 추출
+        if self._last_payload:
+            payload_devices = [
+                {"name": name, "connected": self._last_payload.devices.get(name, False)}
+                for name in DEVICE_NAMES
+            ]
+        else:
+            payload_devices = [{"name": n, "connected": False} for n in DEVICE_NAMES]
+        
         return {
             "combinedData": list(self._chart_data),
-            "devices": devices if devices else [{"name": n, "connected": False} for n in DEVICE_NAMES],
+            "devices": payload_devices,
             "availabilitySegments": [{"start": 0, "end": config.ui.timeline_duration_sec, "isUp": self._is_connected}],
         }
 
