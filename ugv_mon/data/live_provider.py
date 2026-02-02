@@ -153,9 +153,9 @@ class LiveDataProvider:
             
             logger.info(f"Direction changed: {self._current_direction} ({self._src_port}→{self._dst_port})")
             
-            # 통계 초기화 (방향별로 새로 시작)
+            # 통계 스트림 상태 초기화 (5주차 월요일: reset_stream_state 사용)
             if self._stats_calc:
-                self._stats_calc.reset()
+                self._stats_calc.reset_stream_state(clear_records=True)
             
             # 기존 연결 상태였으면 다시 시작
             if self._is_connected:
@@ -242,7 +242,7 @@ class LiveDataProvider:
     def _update_chart(self):
         now = datetime.now()
         stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
-        self._chart_data.append({"timestamp": now.strftime("%H:%M:%S"), "pps": stats.get("pps", 0), "jitter": stats.get("jitter_avg", 0.0)})
+        self._chart_data.append({"timestamp": now.strftime("%H:%M:%S"), "pps": stats.get("pps", 0), "jitter": stats.get("jitter_current", 0.0)})
 
     # =========================================================================
     # 상태 빌드 (리팩토링됨)

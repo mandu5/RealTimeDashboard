@@ -58,15 +58,21 @@ class StatsCalculator:
             
             code_data = self._last_by_code[msg_code]
             
-            # 지터 계산 (msg_code별)
+            # 지터 계산 (msg_code별) - 5주차 월요일: 큰 gap 스킵 로직 추가
+            MAX_GAP_MS = 3000  # 3초 이상 갭은 스트림 재시작으로 간주
+            
             if code_data["timestamp"] is not None:
                 interval_ms = (timestamp - code_data["timestamp"]).total_seconds() * 1000
                 
-                if code_data["interval"] is not None:
-                    # 지터 = |현재 간격 - 이전 간격|
-                    jitter_ms = abs(interval_ms - code_data["interval"])
-                
-                code_data["interval"] = interval_ms
+                if interval_ms > MAX_GAP_MS:
+                    # 큰 갭: 스트림 재시작으로 간주, 지터 계산 스킵
+                    code_data["interval"] = None
+                    jitter_ms = None
+                else:
+                    if code_data["interval"] is not None:
+                        # 지터 = |현재 간격 - 이전 간격|
+                        jitter_ms = abs(interval_ms - code_data["interval"])
+                    code_data["interval"] = interval_ms
             
             code_data["timestamp"] = timestamp  # 반드시 저장 (지터 0 문제 해결)
             
@@ -179,6 +185,14 @@ class StatsCalculator:
             one_sec_ago = datetime.now() - timedelta(seconds=1)
             return sum(1 for r in self._records if r.timestamp >= one_sec_ago)
 
+    def get_current_jitter(self) -> float:
+        """현재 지터 (가장 최근 유효 값)."""
+        with self._lock:
+            for r in reversed(self._records):
+                if r.jitter_ms is not None:
+                    return round(r.jitter_ms, 2)
+            return 0.0
+
     def get_average_jitter(self) -> float:
         """평균 지터."""
         with self._lock:
@@ -192,18 +206,29 @@ class StatsCalculator:
             self._last_sequence = None
             self._last_interval = None
             self._last_by_code.clear()
+            self._loss_by_code.clear()
+
+    def reset_stream_state(self, clear_records: bool = False) -> None:
+        """스트림 상태만 리셋 (방향 전환 시 호출)."""
+        with self._lock:
+            self._last_by_code.clear()
+            self._loss_by_code.clear()
+            if clear_records:
+                self._records.clear()
 
     def get_stats_dict(self) -> dict:
         """전체 통계 딕셔너리."""
         p95, p99 = self.get_jitter_percentiles()
         availability = self.get_availability()  # 한 번만 호출
         
+        packet_loss = self.get_packet_loss()  # 캐싱: 한 번만 호출
+        
         return {
             "pps": self.get_pps(),
-            "jitter_avg": self.get_average_jitter(),
+            "jitter_current": self.get_current_jitter(),  # 5주차: avg → current
             "jitter_p95": p95,
             "jitter_p99": p99,
-            "packet_loss": self.get_packet_loss(),
+            "packet_loss": packet_loss,
             "availability": availability,
         }
 

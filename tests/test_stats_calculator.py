@@ -29,7 +29,7 @@ class TestStatsCalculatorBasic:
         stats = self.calc.get_stats_dict()
         
         assert stats["pps"] == 0
-        assert stats["jitter_avg"] == 0.0
+        assert stats["jitter_current"] == 0.0
         assert stats["jitter_p95"] == 0.0
         assert stats["jitter_p99"] == 0.0
         assert stats["packet_loss"] == 0
