@@ -158,14 +158,29 @@ def status_box_style(bg_gradient: str, border_color: str) -> dict:
         "border": f"1px solid {border_color}",
     }
 
-def led_style(is_active: bool) -> dict:
-    """LED 인디케이터 스타일."""
+def led_style(is_active: bool, custom_color: str = None) -> dict:
+    """LED 인디케이터 스타일.
+    
+    Args:
+        is_active: 활성 상태
+        custom_color: 커스텀 색상 (None이면 기본 빨간색/회색)
+    """
+    if custom_color and is_active:
+        color = custom_color
+        shadow = f"0 0 12px {custom_color}80"  # 80 = 50% opacity
+    elif is_active:
+        color = COLORS["error"]
+        shadow = "0 0 12px rgba(239, 68, 68, 0.5)"
+    else:
+        color = "#cbd5e1"
+        shadow = "none"
+    
     return {
         "width": "8px",
         "height": "8px",
         "borderRadius": "9999px",
-        "backgroundColor": COLORS["error"] if is_active else "#cbd5e1",
-        "boxShadow": "0 0 12px rgba(239, 68, 68, 0.5)" if is_active else "none",
+        "backgroundColor": color,
+        "boxShadow": shadow,
     }
 
 
