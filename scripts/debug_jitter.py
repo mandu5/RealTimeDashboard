@@ -6,8 +6,10 @@
 1. 앱 실행 중 이 스크립트를 import
 2. 주기적으로 get_jitter_debug_info() 호출
 3. 로그에서 JITTER_SKIP 메시지 확인
-cd /path/to/opus1
-python -m scripts.debug_jitter
+
+실행 방법:
+    cd /path/to/opus1
+    python -m scripts.debug_jitter
 """
 
 import logging

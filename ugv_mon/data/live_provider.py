@@ -63,6 +63,12 @@ class LiveDataProvider:
         self._last_packet_time: Optional[datetime] = None
         self._last_payload = None  # 5주차: 마지막 파싱된 운용 상태 페이로드
         
+        # 가용성 히스토리 (5주차: 타임라인 버그 수정)
+        # 각 항목: {"timestamp": datetime, "is_up": bool}
+        self._availability_history: deque = deque(maxlen=config.ui.timeline_duration_sec)  # 1초당 1개
+        self._last_availability_update: Optional[datetime] = None
+        self._last_availability_state: Optional[bool] = None
+        
         # 통계
         self._total_packets = 0
         self._parse_success = 0
@@ -207,6 +213,7 @@ class LiveDataProvider:
             self._process_packets()
             self._check_timeout()
             self._update_chart()
+            self._update_availability()  # 5주차: 가용성 히스토리 업데이트
             # 장치/운용상태는 prev_data 유지 (페이로드 파싱 안함)
             devices = prev_data.get("devices", [])
             return self._build_state(devices if isinstance(devices, list) else [])
@@ -280,6 +287,77 @@ class LiveDataProvider:
             "jitter": jitter
         })
 
+    def _update_availability(self):
+        """가용성 히스토리 업데이트 (매 폴링마다 호출).
+        
+        5주차: 타임라인 버그 수정 - 히스토리 추적으로 부드러운 전환
+        """
+        now = datetime.now()
+        
+        # 1초 이상 경과했을 때만 히스토리에 추가 (중복 방지)
+        if self._last_availability_update is not None:
+            elapsed = (now - self._last_availability_update).total_seconds()
+            if elapsed < 0.9:  # 1초 미만이면 스킵 (폴링 간격: 2초지만 안전하게)
+                return
+        
+        # 상태 변경 시에만 로깅
+        if self._last_availability_state != self._is_connected:
+            logger.debug(f"[AVAILABILITY] State changed: {self._last_availability_state} -> {self._is_connected}")
+        
+        self._availability_history.append({
+            "timestamp": now,
+            "is_up": self._is_connected,
+        })
+        self._last_availability_update = now
+        self._last_availability_state = self._is_connected
+
+    def _build_availability_segments(self) -> List[Dict]:
+        """가용성 히스토리에서 세그먼트 생성.
+        
+        연속된 상태를 하나의 세그먼트로 병합.
+        """
+        if not self._availability_history:
+            # 히스토리 없으면 현재 상태로 전체 표시
+            return [{"start": 0, "end": config.ui.timeline_duration_sec, "isUp": self._is_connected}]
+        
+        segments = []
+        history_list = list(self._availability_history)
+        timeline_sec = config.ui.timeline_duration_sec
+        
+        if len(history_list) < 2:
+            return [{"start": 0, "end": timeline_sec, "isUp": self._is_connected}]
+        
+        # 히스토리를 세그먼트로 변환
+        now = datetime.now()
+        
+        # 연속된 상태를 병합
+        current_state = history_list[0]["is_up"]
+        segment_start = 0
+        
+        for i, entry in enumerate(history_list):
+            # 시간을 0~timeline_sec 범위로 변환
+            age_sec = (now - entry["timestamp"]).total_seconds()
+            position = max(0, min(timeline_sec, timeline_sec - age_sec))
+            
+            if entry["is_up"] != current_state:
+                # 상태 변경 시 현재 세그먼트 종료
+                segments.append({
+                    "start": segment_start,
+                    "end": position,
+                    "isUp": current_state,
+                })
+                segment_start = position
+                current_state = entry["is_up"]
+        
+        # 마지막 세그먼트 추가
+        segments.append({
+            "start": segment_start,
+            "end": timeline_sec,
+            "isUp": current_state,
+        })
+        
+        return segments
+
     # =========================================================================
     # 상태 빌드 (리팩토링됨)
     # =========================================================================
@@ -349,7 +427,7 @@ class LiveDataProvider:
         return {
             "combinedData": list(self._chart_data),
             "devices": payload_devices,
-            "availabilitySegments": [{"start": 0, "end": config.ui.timeline_duration_sec, "isUp": self._is_connected}],
+            "availabilitySegments": self._build_availability_segments(),  # 5주차: 히스토리 기반
         }
 
     def get_logs(self, limit: int = 50) -> List[Dict]:
