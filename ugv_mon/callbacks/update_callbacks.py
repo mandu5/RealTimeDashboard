@@ -1,9 +1,4 @@
-"""
-Dash Callbacks for UGV-MON Dashboard.
-
-대시보드의 모든 상호작용을 처리합니다.
-클로저(Closure)를 통해 data_provider를 캡처합니다 (전역 상태 제거).
-"""
+"""Dash 콜백 모듈 - 대시보드 상호작용 처리."""
 
 import logging
 from dash import Input, Output, State, callback_context, html
@@ -35,13 +30,13 @@ def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     
     _register_data_callback(app, data_provider)
     _register_component_callback(app, data_provider)
-    _register_log_callback(app, data_provider)  # 로그 테이블 (필터링 제거, ag_grid 내장 필터 사용)
+    _register_log_callback(app, data_provider)
     _register_control_callbacks(app, data_provider)
     _register_ui_callbacks(app, data_provider)
 
 
 def _register_data_callback(app, provider) -> None:
-    """데이터 폴링 콜백."""
+    """데이터 폴링 콜백 (2초 interval)."""
     @app.callback(
         Output("dashboard-data", "data"),
         Input("interval-component", "n_intervals"),
@@ -56,7 +51,7 @@ def _register_data_callback(app, provider) -> None:
 
 
 def _register_component_callback(app, provider) -> None:
-    """UI 컴포넌트 업데이트 콜백 (메인 폴링)."""
+    """메인 UI 컴포넌트 업데이트."""
     @app.callback(
         [
             Output("status-chips", "children"),
@@ -68,23 +63,18 @@ def _register_component_callback(app, provider) -> None:
             Output("availability-timeline", "figure"),
             Output("current-pps-display", "children"),
             Output("current-jitter-display", "children"),
-            # 버튼 상태도 폴링에서 업데이트
             Output("connection-toggle-btn", "children"),
             Output("connection-toggle-btn", "variant"),
             Output("connection-toggle-btn", "color"),
         ],
-        [
-            Input("dashboard-data", "data"),
-        ],
-        State("chart-time-range", "data"),  # Input → State: 중복 트리거 방지
+        Input("dashboard-data", "data"),
+        State("chart-time-range", "data"),
     )
     def update_main_components(data, time_range):
-        """메인 데이터 폴링 콜백 - 차트/KPI/상태 업데이트."""
         chart_data = data.get("combinedData", [])
         latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
-        
-        # 버튼 상태 (provider의 실제 상태)
         is_conn = getattr(provider, '_is_connected', False)
+        
         btn_children = [
             html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
             html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
@@ -100,7 +90,6 @@ def _register_component_callback(app, provider) -> None:
             create_availability_timeline(data.get("availabilitySegments", [])),
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
-            # 버튼 상태
             btn_children,
             "filled" if is_conn else "outline",
             "green" if is_conn else "red",
@@ -108,26 +97,20 @@ def _register_component_callback(app, provider) -> None:
 
 
 def _register_log_callback(app, provider) -> None:
-    """로그 테이블 업데이트 콜백 (ag_grid 내장 필터 사용으로 필터링 제거)."""
+    """로그 테이블 업데이트."""
     @app.callback(
-        [
-            Output("log-table", "rowData"),
-            Output("log-table-title", "children"),
-        ],
-        Input("dashboard-data", "data"),  # 단일 Input만 사용
+        [Output("log-table", "rowData"), Output("log-table-title", "children")],
+        Input("dashboard-data", "data"),
     )
     def update_log_table(data):
-        """로그 테이블 업데이트."""
         logs = provider.get_logs(limit=50)
-        return (
-            logs,
-            f"로그/이벤트 테이블 (최근 {provider.log_count}개)",
-        )
+        return (logs, f"로그/이벤트 테이블 (최근 {provider.log_count}개)")
 
 
 def _register_control_callbacks(app, provider) -> None:
     """제어 버튼 콜백."""
-    @app.callback(Output("is-paused", "data"), Input("pause-btn", "n_clicks"), State("is-paused", "data"), prevent_initial_call=True)
+    @app.callback(Output("is-paused", "data"), Input("pause-btn", "n_clicks"), 
+                  State("is-paused", "data"), prevent_initial_call=True)
     def toggle_pause(n_clicks, is_paused):
         return not is_paused
     
@@ -136,8 +119,10 @@ def _register_control_callbacks(app, provider) -> None:
         return "Resume" if is_paused else "Pause"
     
     @app.callback(
-        [Output("chart-time-range", "data"), Output("time-range-30s", "variant"), Output("time-range-1m", "variant"), Output("time-range-5m", "variant")],
-        [Input("time-range-30s", "n_clicks"), Input("time-range-1m", "n_clicks"), Input("time-range-5m", "n_clicks")],
+        [Output("chart-time-range", "data"), Output("time-range-30s", "variant"),
+         Output("time-range-1m", "variant"), Output("time-range-5m", "variant")],
+        [Input("time-range-30s", "n_clicks"), Input("time-range-1m", "n_clicks"),
+         Input("time-range-5m", "n_clicks")],
         prevent_initial_call=True,
     )
     def update_time_range(n30, n1m, n5m):
@@ -145,74 +130,58 @@ def _register_control_callbacks(app, provider) -> None:
         if not ctx.triggered:
             raise PreventUpdate
         btn = ctx.triggered[0]["prop_id"].split(".")[0]
-        mappings = {"time-range-30s": (30, "filled", "outline", "outline"), "time-range-1m": (60, "outline", "filled", "outline"), "time-range-5m": (300, "outline", "outline", "filled")}
+        mappings = {
+            "time-range-30s": (30, "filled", "outline", "outline"),
+            "time-range-1m": (60, "outline", "filled", "outline"),
+            "time-range-5m": (300, "outline", "outline", "filled"),
+        }
         return mappings.get(btn, (60, "outline", "filled", "outline"))
     
-    @app.callback(Output("dashboard-data", "data", allow_duplicate=True), Input("clear-btn", "n_clicks"), State("dashboard-data", "data"), prevent_initial_call=True)
+    @app.callback(Output("dashboard-data", "data", allow_duplicate=True),
+                  Input("clear-btn", "n_clicks"), State("dashboard-data", "data"), prevent_initial_call=True)
     def clear_logs(n_clicks, current_data):
         provider.clear_logs()
         return current_data
 
 
 def _register_ui_callbacks(app, provider) -> None:
-    """UI 제어 콜백 (인터페이스 전환, 연결 토글, 방향 전환)."""
-    @app.callback(Output("dashboard-data", "data", allow_duplicate=True), Input("interface-select", "value"), State("dashboard-data", "data"), prevent_initial_call=True)
+    """UI 제어 콜백 (인터페이스, 연결, 방향)."""
+    @app.callback(Output("dashboard-data", "data", allow_duplicate=True),
+                  Input("interface-select", "value"), State("dashboard-data", "data"), prevent_initial_call=True)
     def on_interface_change(new_interface, current_data):
         if hasattr(provider, 'switch_interface') and provider.switch_interface(new_interface):
             logger.info(f"Interface switched to: {new_interface}")
             return provider.update_data(current_data)
         raise PreventUpdate
     
-    # 연결 토글 버튼 - 버튼 상태만 반환 (data 업데이트는 분리)
     @app.callback(
-        [
-            Output("connection-toggle-btn", "children", allow_duplicate=True),
-            Output("connection-toggle-btn", "variant", allow_duplicate=True),
-            Output("connection-toggle-btn", "color", allow_duplicate=True),
-        ],
-        Input("connection-toggle-btn", "n_clicks"),
-        prevent_initial_call=True,
+        [Output("connection-toggle-btn", "children", allow_duplicate=True),
+         Output("connection-toggle-btn", "variant", allow_duplicate=True),
+         Output("connection-toggle-btn", "color", allow_duplicate=True)],
+        Input("connection-toggle-btn", "n_clicks"), prevent_initial_call=True,
     )
     def on_connection_toggle(n_clicks):
         if not hasattr(provider, 'toggle_connection'):
             raise PreventUpdate
-        
         is_conn = provider.toggle_connection()
-        
-        btn_text = "연결됨" if is_conn else "연결끊김"
         btn_children = [
             html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
-            html.Span(btn_text, style={"fontSize": "12px", "fontWeight": "600"}),
+            html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
         ]
-        
-        return (
-            btn_children,
-            "filled" if is_conn else "outline",
-            "green" if is_conn else "red",
-        )
+        return (btn_children, "filled" if is_conn else "outline", "green" if is_conn else "red")
     
-    # 방향 전환 버튼 (children + color 통합)
     @app.callback(
-        [
-            Output("direction-toggle-btn", "children", allow_duplicate=True),
-            Output("direction-toggle-btn", "color", allow_duplicate=True),
-        ],
-        Input("direction-toggle-btn", "n_clicks"),
-        prevent_initial_call=True,
+        [Output("direction-toggle-btn", "children", allow_duplicate=True),
+         Output("direction-toggle-btn", "color", allow_duplicate=True)],
+        Input("direction-toggle-btn", "n_clicks"), prevent_initial_call=True,
     )
     def on_direction_toggle(n_clicks):
         if not hasattr(provider, 'toggle_direction'):
             raise PreventUpdate
-        
         direction = provider.toggle_direction()
-        
         label = "상태(50000→61000)" if direction == "status" else "제어(61000→50000)"
-        color = "blue" if direction == "status" else "orange"
-        
         children = [
             html.Span("방향", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
             html.Span(label, style={"fontSize": "12px", "fontWeight": "600"}),
         ]
-        
-        return children, color
-
+        return children, "blue" if direction == "status" else "orange"

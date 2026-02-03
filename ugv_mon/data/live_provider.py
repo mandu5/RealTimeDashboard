@@ -1,9 +1,4 @@
-"""
-Live Data Provider - 실시간 패킷 캡처 및 헤더 파싱.
-
-NOTE: 페이로드는 ICD 명세 확정 전까지 파싱하지 않음.
-헤더 기반 통계만 제공 (PPS, 지터, 패킷 손실 등).
-"""
+"""실시간 패킷 캡처 및 분석 - 대시보드 통계 제공."""
 
 import logging
 import os
