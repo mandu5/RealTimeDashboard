@@ -115,6 +115,11 @@ class LiveDataProvider:
             was_running = self._is_connected
             if was_running:
                 self.stop_capture()
+            
+            # 인터페이스 전환 시 스트림 상태 리셋 (5주차: 지터 오염 방지)
+            if self._stats_calc:
+                self._stats_calc.reset_stream_state(clear_records=False)
+            
             old = self._interface
             self._interface = new_interface
             if was_running:
@@ -128,7 +133,14 @@ class LiveDataProvider:
         with self._lock:
             if self._is_connected:
                 self.stop_capture()
+                # 연결 해제 시 스트림 상태 리셋 (5주차: 지터 오염 방지)
+                if self._stats_calc:
+                    self._stats_calc.reset_stream_state(clear_records=False)
                 return False
+            
+            # 연결 시작 시 스트림 상태 리셋 (5주차: 지터 오염 방지)
+            if self._stats_calc:
+                self._stats_calc.reset_stream_state(clear_records=False)
             return self.start_capture()
 
     def toggle_direction(self) -> str:
@@ -255,7 +267,18 @@ class LiveDataProvider:
     def _update_chart(self):
         now = datetime.now()
         stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
-        self._chart_data.append({"timestamp": now.strftime("%H:%M:%S"), "pps": stats.get("pps", 0), "jitter": stats.get("jitter_current", 0.0)})
+        jitter = stats.get("jitter_current", 0.0)
+        
+        # 5주차: 지터 필터링 (200ms 이상은 0으로 표시)
+        from ..analysis.stats_calculator import MAX_JITTER_MS
+        if jitter > MAX_JITTER_MS:
+            jitter = 0.0
+        
+        self._chart_data.append({
+            "timestamp": now.strftime("%H:%M:%S"), 
+            "pps": stats.get("pps", 0), 
+            "jitter": jitter
+        })
 
     # =========================================================================
     # 상태 빌드 (리팩토링됨)
