@@ -13,7 +13,6 @@ from typing import Dict, Protocol, List
 from ..components.kpi_card import create_kpi_cards_row
 from ..layouts.header import create_status_chips
 from ..components.device_grid import create_device_grid
-from ..components.log_table import filter_logs
 from ..layouts.panels import create_operational_status_boxes, create_emergency_indicators
 from ..layouts.charts import create_communication_chart, create_availability_timeline
 
@@ -36,7 +35,7 @@ def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     
     _register_data_callback(app, data_provider)
     _register_component_callback(app, data_provider)
-    _register_log_filter_callback(app, data_provider)  # 로그 필터 콜백 분리
+    _register_log_callback(app, data_provider)  # 로그 테이블 (필터링 제거, ag_grid 내장 필터 사용)
     _register_control_callbacks(app, data_provider)
     _register_ui_callbacks(app, data_provider)
 
@@ -76,8 +75,8 @@ def _register_component_callback(app, provider) -> None:
         ],
         [
             Input("dashboard-data", "data"),
-            Input("chart-time-range", "data"),
         ],
+        State("chart-time-range", "data"),  # Input → State: 중복 트리거 방지
     )
     def update_main_components(data, time_range):
         """메인 데이터 폴링 콜백 - 차트/KPI/상태 업데이트."""
@@ -108,29 +107,21 @@ def _register_component_callback(app, provider) -> None:
         )
 
 
-def _register_log_filter_callback(app, provider) -> None:
-    """로그 테이블 필터링 콜백 (분리됨)."""
+def _register_log_callback(app, provider) -> None:
+    """로그 테이블 업데이트 콜백 (ag_grid 내장 필터 사용으로 필터링 제거)."""
     @app.callback(
         [
             Output("log-table", "rowData"),
             Output("log-table-title", "children"),
         ],
-        [
-            Input("dashboard-data", "data"),
-            Input("log-filter-msgcode", "value"),
-            Input("log-filter-status", "value"),
-            Input("log-search-input", "value"),
-        ],
+        Input("dashboard-data", "data"),  # 단일 Input만 사용
     )
-    def update_log_table(data, msg_filter, status_filter, search_text):
-        """로그 테이블 업데이트 - 필터링만 담당."""
+    def update_log_table(data):
+        """로그 테이블 업데이트."""
         logs = provider.get_logs(limit=50)
-        filtered_logs = filter_logs(logs, msg_filter or "all", status_filter or "all", search_text or "")
-        filter_info = f" (필터: {len(filtered_logs)}/{len(logs)})" if len(filtered_logs) != len(logs) else ""
-        
         return (
-            filtered_logs,
-            f"로그/이벤트 테이블 (최근 {provider.log_count}개){filter_info}",
+            logs,
+            f"로그/이벤트 테이블 (최근 {provider.log_count}개)",
         )
 
 
