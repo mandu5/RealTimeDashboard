@@ -302,10 +302,7 @@ class LiveDataProvider:
                 "operationalMode": p.operation_mode,
                 "operationalAuthority": p.authority,
                 "drivingState": p.driving_state,
-                "emergencyStatus": {
-                    "sources": p.emergency_sources,
-                    "complete": p.emergency_complete,
-                },
+                "emergencyStatus": p.get_emergency_dict(),  # UI용 딕셔너리 사용
             }
         else:
             return {

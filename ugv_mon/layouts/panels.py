@@ -109,21 +109,46 @@ def create_emergency_indicators(emergency_status: Dict[str, bool]) -> List:
 
 
 def _emergency_indicator(name: str, is_active: bool) -> html.Div:
-    """단일 비상정지 인디케이터."""
+    """단일 비상정지 인디케이터.
+    
+    처리완료(complete)는 초록색, 발생원은 빨간색으로 표시.
+    """
+    # 처리완료는 초록색, 그 외 발생원은 빨간색
+    is_complete = name == "처리완료"
+    
+    if is_complete and is_active:
+        # 처리완료 활성: 초록색
+        text_color = COLORS["success_dark"]
+        bg_color = COLORS["bg_success"]
+        border_color = "#a7f3d0"
+        led_color = "#22c55e"  # 초록 LED
+    elif is_active:
+        # 발생원 활성: 빨간색
+        text_color = "#dc2626"
+        bg_color = COLORS["bg_error"]
+        border_color = "#fecaca"
+        led_color = None  # 기본 빨간 LED
+    else:
+        # 비활성: 회색
+        text_color = COLORS["text_muted"]
+        bg_color = "#f8fafc"
+        border_color = "transparent"
+        led_color = None
+    
     return html.Div(
         children=[
-            html.Div(style=led_style(is_active)),
+            html.Div(style=led_style(is_active, led_color)),
             html.Span(name, style={
                 "fontSize": "12px",
                 "fontWeight": "600" if is_active else "500",
-                "color": "#dc2626" if is_active else COLORS["text_muted"],
+                "color": text_color,
             }),
         ],
         style={
             "display": "flex", "alignItems": "center", "gap": "12px",
             "padding": "8px 12px", "borderRadius": "8px",
-            "backgroundColor": COLORS["bg_error"] if is_active else "#f8fafc",
-            "border": f"1px solid {'#fecaca' if is_active else 'transparent'}",
+            "backgroundColor": bg_color,
+            "border": f"1px solid {border_color}",
         },
     )
 

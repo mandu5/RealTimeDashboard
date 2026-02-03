@@ -142,3 +142,11 @@ class OperationalPayload:
             "emergency_complete": self.emergency_complete,
         }
 
+    def get_emergency_dict(self) -> Dict[str, bool]:
+        """UI용 비상정지 상태 딕셔너리 (처리완료 포함)."""
+        emergency_dict = {}
+        for source in EMERGENCY_SOURCE_NAMES:
+            emergency_dict[source] = source in self.emergency_sources
+        # 처리완료 상태 추가 (UI에서 초록색으로 표시)
+        emergency_dict["처리완료"] = self.emergency_complete
+        return emergency_dict
