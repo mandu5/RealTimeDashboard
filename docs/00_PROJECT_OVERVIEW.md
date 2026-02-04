@@ -17,6 +17,7 @@
 | **Python** | 3.10+ |
 | **프레임워크** | Dash + Plotly + DMC + AG-Grid |
 | **갱신 방식** | Polling (dcc.Interval, 2초) |
+| **테스트** | 33개 pytest 케이스 |
 
 ## 기술 스택
 

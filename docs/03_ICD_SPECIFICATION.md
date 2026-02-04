@@ -27,24 +27,24 @@
 
 ```
 ┌─────────┬─────────┬─────────┬─────────────────────────────┤
-│ Byte 0  │ Byte 1  │ Byte 2  │ Byte 3 (Sequence Number)    │
+│ Byte 0  │ Byte 1  │ Byte 2  │ Byte 3 (Sequence: 하위 4bit)│
 └─────────┴─────────┴─────────┴─────────────────────────────┘
                                       │
                                       ▼
-                              0~255 순환 (rollover)
+                              0~15 순환 (4비트 rollover)
                               손실 추정에 사용
 ```
 
 **파싱 방법**:
 ```python
 timestamp = struct.unpack('<I', data[0:4])[0]  # 4-byte unsigned int
-sequence = data[3]  # 마지막 1 byte만 시퀀스 번호
+sequence = data[3] & 0x0F  # 하위 4비트만 시퀀스 번호 (0~15)
 ```
 
 **시퀀스 번호 활용**:
 - 패킷 고유 번호로 사용
 - `prev_seq`와 `curr_seq` 차이가 1이 아니면 누락 추정
-- 8비트이므로 0~255 순환 처리 필요
+- **4비트이므로 0~15 순환 처리 필요**
 
 ---
 

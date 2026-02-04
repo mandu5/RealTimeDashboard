@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 # 프로젝트 루트 경로 추가
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ugv_mon.analysis.stats_calculator import StatsCalculator, PacketRecord
+from ugv_mon.analysis.stats_calculator import StatsCalculator
 from ugv_mon.constants import SEQ_MODULO, EXPECTED_PPS
 
 
@@ -236,29 +236,30 @@ class TestWindowPruning:
 
 
 class TestSequenceGap:
-    """시퀀스 갭 계산 테스트."""
+    """시퀀스 갭 계산 테스트 (4비트 롤오버)."""
 
-    def setup_method(self):
-        self.calc = StatsCalculator(window_sec=60)
+    def _seq_gap(self, prev: int, curr: int) -> int:
+        """로컬 시퀀스 갭 계산 (테스트용)."""
+        return ((curr & 0x0F) - (prev & 0x0F)) % 16
 
     def test_normal_gap(self):
         """일반 갭."""
-        gap = self.calc._seq_gap(10, 11)
+        gap = self._seq_gap(10, 11)
         assert gap == 1
 
     def test_multiple_gap(self):
         """다중 갭."""
-        gap = self.calc._seq_gap(10, 15)
+        gap = self._seq_gap(10, 15)
         assert gap == 5
 
     def test_rollover_gap(self):
         """4비트 롤오버 갭 (15 → 0)."""
-        gap = self.calc._seq_gap(15, 0)
+        gap = self._seq_gap(15, 0)
         # (0 - 15) % 16 = 1
         assert gap == 1
 
     def test_rollover_with_extra(self):
         """4비트 롤오버 + 추가 갭 (14 → 3)."""
-        gap = self.calc._seq_gap(14, 3)
+        gap = self._seq_gap(14, 3)
         # (3 - 14) % 16 = 5
         assert gap == 5

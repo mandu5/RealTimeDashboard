@@ -1,6 +1,6 @@
 # UGV-MON 파일 구조
 
-> **최종 업데이트**: 2026-01-29
+> **최종 업데이트**: 2026-02-04
 
 ## 디렉토리 구조
 
@@ -21,8 +21,8 @@ opus1/
 │   ├── 02_FILE_STRUCTURE.md     # 파일 구조 (이 문서)
 │   ├── 03_ICD_SPECIFICATION.md  # ICD 명세
 │   ├── 05_KPI_DATA_ANALYSIS.md  # KPI 상세 설명
-│   ├── 07_VISUALIZATION_IDEAS.md # 시각화 개선 아이디어
-│   └── 08_FINAL_CODE_REVIEW.md  # 최종 코드 리뷰
+│   ├── 07_VISUALIZATION_IDEAS.md # 데이터 분석 아이디어
+│   └── 09_MIDTERM_FEEDBACK.md   # 중간발표 피드백
 │
 ├── logs/                  # 로그 폴더
 │   └── alerts.log         # 알림 로그 (자동 생성)
