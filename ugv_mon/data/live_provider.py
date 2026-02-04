@@ -379,13 +379,16 @@ class LiveDataProvider:
     def _build_stats_state(self) -> Dict:
         """통계 관련 필드."""
         stats = self._stats_calc.get_stats_dict() if self._stats_calc else {}
+        hourly_avail = self._stats_calc.get_hourly_availability() if self._stats_calc else 0.0
         return {
             "capturePps": stats.get("pps", 0),
             "parseSuccess": round((self._parse_success / max(self._total_packets, 1)) * 100, 1),
             "checksumFail": round((self._checksum_fail / max(self._total_packets, 1)) * 100, 1),
             "packetLoss": stats.get("packet_loss", 0),
             "availability5min": stats.get("availability", 0.0),
-            "jitterCurrent": stats.get("jitter_current", 0.0),  # 5주차: 추가
+            "availability": stats.get("availability", 0.0),  # Phase 2: UI용
+            "availabilityHourly": hourly_avail,  # Phase 2: 1시간 가용성
+            "jitterCurrent": stats.get("jitter_current", 0.0),
             "jitterP95": stats.get("jitter_p95", 0.0),
             "jitterP99": stats.get("jitter_p99", 0.0),
         }

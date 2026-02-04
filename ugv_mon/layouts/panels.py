@@ -254,10 +254,22 @@ def _legend_item(label: str, color: str) -> html.Div:
 # =============================================================================
 
 def create_availability_panel(data: Dict) -> dmc.Card:
-    """가용성 타임라인 패널."""
+    """가용성 타임라인 패널 (요약 통계 포함)."""
+    avail_10m = data.get("availability", 0)
+    avail_1h = data.get("availabilityHourly", 0)
+    
     return dmc.Card(
         children=[
-            _panel_header("가용성 타임라인 (1시간)"),
+            _panel_header("가용성 타임라인"),
+            # 요약 통계
+            dmc.Group(
+                [
+                    dmc.Badge(f"10분: {avail_10m:.1f}%", color="blue", variant="light", size="lg"),
+                    dmc.Badge(f"1시간: {avail_1h:.1f}%", color="teal", variant="light", size="lg"),
+                ],
+                gap="md",
+                mb="sm",
+            ),
             dcc.Graph(
                 id="availability-timeline",
                 figure=create_availability_timeline(data.get("availabilitySegments", [])),
