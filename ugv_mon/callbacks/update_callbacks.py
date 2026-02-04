@@ -1,7 +1,7 @@
 """Dash 콜백 모듈 - 대시보드 상호작용 처리."""
 
 import logging
-from dash import Input, Output, State, callback_context, html
+from dash import Input, Output, State, html
 from dash.exceptions import PreventUpdate
 from typing import Dict, Protocol, List
 
@@ -17,10 +17,7 @@ logger = logging.getLogger(__name__)
 class DataProviderProtocol(Protocol):
     """데이터 제공자 인터페이스."""
     def update_data(self, prev_data: Dict) -> Dict: ...
-    def get_logs(self, limit: int = 50) -> List[Dict]: ...
     def clear_logs(self) -> None: ...
-    @property
-    def log_count(self) -> int: ...
 
 
 def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
@@ -30,7 +27,6 @@ def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     
     _register_data_callback(app, data_provider)
     _register_component_callback(app, data_provider)
-    _register_log_callback(app, data_provider)
     _register_control_callbacks(app, data_provider)
     _register_ui_callbacks(app, data_provider)
 
@@ -68,9 +64,8 @@ def _register_component_callback(app, provider) -> None:
             Output("connection-toggle-btn", "color"),
         ],
         Input("dashboard-data", "data"),
-        State("chart-time-range", "data"),
     )
-    def update_main_components(data, time_range):
+    def update_main_components(data):
         chart_data = data.get("combinedData", [])
         latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
         is_conn = getattr(provider, '_is_connected', False)
@@ -86,7 +81,7 @@ def _register_component_callback(app, provider) -> None:
             create_operational_status_boxes(data),
             create_emergency_indicators(data.get("emergencyStatus", {})),
             create_device_grid(data.get("devices", [])),
-            create_communication_chart(chart_data, data.get("jitterP95", 0), data.get("jitterP99", 0), time_range or 60),
+            create_communication_chart(chart_data, data.get("jitterP95", 0), data.get("jitterP99", 0), 60),
             create_availability_timeline(data.get("availabilitySegments", [])),
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
@@ -94,17 +89,6 @@ def _register_component_callback(app, provider) -> None:
             "filled" if is_conn else "outline",
             "green" if is_conn else "red",
         )
-
-
-def _register_log_callback(app, provider) -> None:
-    """로그 테이블 업데이트."""
-    @app.callback(
-        [Output("log-table", "rowData"), Output("log-table-title", "children")],
-        Input("dashboard-data", "data"),
-    )
-    def update_log_table(data):
-        logs = provider.get_logs(limit=50)
-        return (logs, f"로그/이벤트 테이블 (최근 {provider.log_count}개)")
 
 
 def _register_control_callbacks(app, provider) -> None:
@@ -117,25 +101,6 @@ def _register_control_callbacks(app, provider) -> None:
     @app.callback(Output("pause-btn", "children"), Input("is-paused", "data"))
     def update_pause_text(is_paused):
         return "Resume" if is_paused else "Pause"
-    
-    @app.callback(
-        [Output("chart-time-range", "data"), Output("time-range-30s", "variant"),
-         Output("time-range-1m", "variant"), Output("time-range-5m", "variant")],
-        [Input("time-range-30s", "n_clicks"), Input("time-range-1m", "n_clicks"),
-         Input("time-range-5m", "n_clicks")],
-        prevent_initial_call=True,
-    )
-    def update_time_range(n30, n1m, n5m):
-        ctx = callback_context
-        if not ctx.triggered:
-            raise PreventUpdate
-        btn = ctx.triggered[0]["prop_id"].split(".")[0]
-        mappings = {
-            "time-range-30s": (30, "filled", "outline", "outline"),
-            "time-range-1m": (60, "outline", "filled", "outline"),
-            "time-range-5m": (300, "outline", "outline", "filled"),
-        }
-        return mappings.get(btn, (60, "outline", "filled", "outline"))
     
     @app.callback(Output("dashboard-data", "data", allow_duplicate=True),
                   Input("clear-btn", "n_clicks"), State("dashboard-data", "data"), prevent_initial_call=True)
