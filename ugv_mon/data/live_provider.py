@@ -56,13 +56,23 @@ class LiveDataProvider:
         self._chart_data: deque = deque(maxlen=config.ui.max_chart_points)
         self._is_connected = False
         self._last_packet_time: Optional[datetime] = None
-        self._last_payload = None  # 5주차: 마지막 파싱된 운용 상태 페이로드
+        self._last_payload = None
         
-        # 가용성 히스토리 (5주차: 타임라인 버그 수정)
-        # 각 항목: {"timestamp": datetime, "is_up": bool}
-        self._availability_history: deque = deque(maxlen=config.ui.timeline_duration_sec)  # 1초당 1개
+        # 가용성 히스토리
+        self._availability_history: deque = deque(maxlen=config.ui.timeline_duration_sec)
         self._last_availability_update: Optional[datetime] = None
         self._last_availability_state: Optional[bool] = None
+        
+        # Phase 4: 연결 이력
+        self._connection_history: deque = deque(maxlen=100)
+        self._last_connection_state: Optional[bool] = None
+        
+        # Phase 5: 운용상태 전이 이력
+        self._mode_transitions: deque = deque(maxlen=50)
+        self._last_op_mode: Optional[str] = None
+        
+        # Phase 6: 비상정지 원인 통계
+        self._emergency_counts: Dict[str, int] = {}
         
         # 통계
         self._total_packets = 0
@@ -238,8 +248,9 @@ class LiveDataProvider:
                 result.header.msg_code  # msg_code 추가
             )
         
-        # 페이로드 저장 (5주차: 운용 상태 UI 연동)
+        # 페이로드 저장 및 이력 업데이트
         if result.payload:
+            self._update_histories(result.payload)
             self._last_payload = result.payload
         
         # 로그 추가 (헤더 + 페이로드 정보)
@@ -281,6 +292,41 @@ class LiveDataProvider:
             "pps": stats.get("pps", 0), 
             "jitter": jitter
         })
+
+    def _update_histories(self, payload):
+        """Phase 4-6: 페이로드 기반 이력 업데이트."""
+        now = datetime.now()
+        
+        # Phase 4: 연결 상태 변경 이력
+        if self._last_connection_state != self._is_connected:
+            self._connection_history.append({
+                "timestamp": now.isoformat(),
+                "connected": self._is_connected,
+                "duration": None,  # 다음 변경 시 계산
+            })
+            # 이전 항목에 duration 계산
+            if len(self._connection_history) >= 2:
+                prev = self._connection_history[-2]
+                if prev.get("duration") is None:
+                    duration = (now - datetime.fromisoformat(prev["timestamp"])).total_seconds()
+                    prev["duration"] = round(duration, 1)
+            self._last_connection_state = self._is_connected
+        
+        # Phase 5: 운용모드 전이 이력
+        current_mode = payload.operation_mode
+        if self._last_op_mode and self._last_op_mode != current_mode:
+            self._mode_transitions.append({
+                "timestamp": now.isoformat(),
+                "from": self._last_op_mode,
+                "to": current_mode,
+            })
+        self._last_op_mode = current_mode
+        
+        # Phase 6: 비상정지 원인 집계
+        if payload.is_emergency:
+            reasons = payload.get_emergency_reasons()
+            for reason in reasons:
+                self._emergency_counts[reason] = self._emergency_counts.get(reason, 0) + 1
 
     def _update_availability(self):
         """가용성 히스토리 업데이트 (매 폴링마다 호출).
@@ -422,10 +468,18 @@ class LiveDataProvider:
         else:
             payload_devices = [{"name": n, "connected": False} for n in DEVICE_NAMES]
         
+        # msg_code별 통계 (Phase 3)
+        msg_code_stats = self._stats_calc.get_stats_by_code() if self._stats_calc else {}
+        
         return {
             "combinedData": list(self._chart_data),
             "devices": payload_devices,
-            "availabilitySegments": self._build_availability_segments(),  # 5주차: 히스토리 기반
+            "availabilitySegments": self._build_availability_segments(),
+            "msgCodeStats": msg_code_stats,
+            # Phase 4-6: 이력 데이터
+            "connectionHistory": list(self._connection_history)[-10:],  # 최근 10개
+            "modeTransitions": list(self._mode_transitions)[-10:],
+            "emergencyCounts": dict(self._emergency_counts),
         }
 
     def get_logs(self, limit: int = 50) -> List[Dict]:
