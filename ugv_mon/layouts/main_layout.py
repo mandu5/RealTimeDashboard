@@ -17,6 +17,10 @@ from .panels import (
     create_charts_panel,
     create_availability_panel,
     create_log_panel,
+    create_msg_code_stats_panel,
+    create_connection_history_panel,
+    create_mode_transitions_panel,
+    create_emergency_stats_panel,
 )
 from ..components.kpi_card import create_kpi_cards_row
 from ..config import config
@@ -80,6 +84,9 @@ def _create_main_content(data: Dict) -> html.Div:
                 children=[
                     create_operational_status_panel(data),
                     create_emergency_status_panel(data.get("emergencyStatus", {})),
+                    create_emergency_stats_panel(data),  # Phase 6
+                    create_mode_transitions_panel(data),  # Phase 5
+                    create_connection_history_panel(data),  # Phase 4
                 ],
                 style=FLEX_COLUMN,
             ),
@@ -87,6 +94,7 @@ def _create_main_content(data: Dict) -> html.Div:
             html.Div(
                 children=[
                     create_device_panel(data.get("devices", [])),
+                    create_msg_code_stats_panel(data),  # Phase 3
                     create_charts_panel(data),
                     create_availability_panel(data),
                 ],
