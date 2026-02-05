@@ -58,10 +58,11 @@ class LiveDataProvider:
         self._last_packet_time: Optional[datetime] = None
         self._last_payload = None
         
-        # 가용성 히스토리
-        self._availability_history: deque = deque(maxlen=config.ui.timeline_duration_sec)
-        self._last_availability_update: Optional[datetime] = None
-        self._last_availability_state: Optional[bool] = None
+        # 가용성 세그먼트 (회사 방식)
+        self._start_time: datetime = datetime.now()
+        self._availability_segments: List[Dict] = []
+        self._last_avail_change_time: Optional[datetime] = None
+        self._last_avail_state: Optional[bool] = None
         
         # Phase 4: 연결 이력
         self._connection_history: deque = deque(maxlen=100)
@@ -218,7 +219,8 @@ class LiveDataProvider:
             self._process_packets()
             self._check_timeout()
             self._update_chart()
-            self._update_availability()
+            # 가용성 상태 변경 기록 (회사 방식)
+            self._record_availability_change(self._is_connected)
             return self._build_state()
 
     def _process_packets(self):
@@ -326,76 +328,90 @@ class LiveDataProvider:
             for reason in reasons:
                 self._emergency_counts[reason] = self._emergency_counts.get(reason, 0) + 1
 
-    def _update_availability(self):
-        """가용성 히스토리 업데이트 (매 폴링마다 호출).
+    def _record_availability_change(self, new_is_up: bool) -> None:
+        """연결 상태 변화 시 가용성 세그먼트 기록 (회사 방식).
         
-        5주차: 타임라인 버그 수정 - 히스토리 추적으로 부드러운 전환
+        - 이전 상태 구간을 닫고 (END 확정)
+        - 새 상태 시작 시각을 저장
         """
         now = datetime.now()
+
+        # 최초 호출 (세그먼트 시작점만 세팅)
+        if self._last_avail_change_time is None:
+            self._last_avail_change_time = now
+            self._last_avail_state = new_is_up
+            return
+
+        # 상태가 바뀌지 않았으면 기록할 필요 없음
+        if new_is_up == self._last_avail_state:
+            return
+
+        # 이전 상태 구간을 세그먼트로 확정
+        start_sec = (self._last_avail_change_time - self._start_time).total_seconds()
+        end_sec = (now - self._start_time).total_seconds()
         
-        # 1초 이상 경과했을 때만 히스토리에 추가 (중복 방지)
-        if self._last_availability_update is not None:
-            elapsed = (now - self._last_availability_update).total_seconds()
-            if elapsed < 0.9:  # 1초 미만이면 스킵 (폴링 간격: 2초지만 안전하게)
-                return
-        
-        # 상태 변경 시에만 로깅
-        if self._last_availability_state != self._is_connected:
-            logger.debug(f"[AVAILABILITY] State changed: {self._last_availability_state} -> {self._is_connected}")
-        
-        self._availability_history.append({
-            "timestamp": now,
-            "is_up": self._is_connected,
+        self._availability_segments.append({
+            "start": max(0, start_sec),
+            "end": max(0, end_sec),
+            "isUp": self._last_avail_state,
         })
-        self._last_availability_update = now
-        self._last_availability_state = self._is_connected
+
+        # 새 상태 시작점 갱신
+        self._last_avail_change_time = now
+        self._last_avail_state = new_is_up
+        
+        # 오래된 세그먼트 정리 (1시간 초과)
+        self._trim_availability_segments(max_sec=3600)
+
+    def _trim_availability_segments(self, max_sec: int = 3600) -> None:
+        """오래된 세그먼트 제거."""
+        now = datetime.now()
+        cutoff = (now - self._start_time).total_seconds() - max_sec
+        self._availability_segments = [
+            seg for seg in self._availability_segments if seg["end"] > cutoff
+        ]
 
     def _build_availability_segments(self) -> List[Dict]:
-        """가용성 히스토리에서 세그먼트 생성.
+        """가용성 세그먼트 반환 (회사 방식).
         
-        연속된 상태를 하나의 세그먼트로 병합.
+        타임라인 범위로 정규화하여 반환.
         """
-        if not self._availability_history:
-            # 히스토리 없으면 현재 상태로 전체 표시
-            return [{"start": 0, "end": config.ui.timeline_duration_sec, "isUp": self._is_connected}]
-        
-        segments = []
-        history_list = list(self._availability_history)
         timeline_sec = config.ui.timeline_duration_sec
+        now = datetime.now()
+        current_offset = (now - self._start_time).total_seconds()
         
-        if len(history_list) < 2:
+        if not self._availability_segments:
+            # 세그먼트 없으면 현재 상태로 전체 표시
             return [{"start": 0, "end": timeline_sec, "isUp": self._is_connected}]
         
-        # 히스토리를 세그먼트로 변환
-        now = datetime.now()
-        
-        # 연속된 상태를 병합
-        current_state = history_list[0]["is_up"]
-        segment_start = 0
-        
-        for i, entry in enumerate(history_list):
-            # 시간을 0~timeline_sec 범위로 변환
-            age_sec = (now - entry["timestamp"]).total_seconds()
-            position = max(0, min(timeline_sec, timeline_sec - age_sec))
+        # 세그먼트를 0~timeline_sec 범위로 정규화
+        normalized = []
+        for seg in self._availability_segments:
+            # 상대 위치 계산 (현재 시점 기준 과거)
+            start_pos = timeline_sec - (current_offset - seg["start"])
+            end_pos = timeline_sec - (current_offset - seg["end"])
             
-            if entry["is_up"] != current_state:
-                # 상태 변경 시 현재 세그먼트 종료
-                segments.append({
-                    "start": segment_start,
-                    "end": position,
-                    "isUp": current_state,
+            # 범위 체크
+            if end_pos < 0 or start_pos > timeline_sec:
+                continue
+            
+            normalized.append({
+                "start": max(0, start_pos),
+                "end": min(timeline_sec, end_pos),
+                "isUp": seg["isUp"],
+            })
+        
+        # 현재 진행 중인 세그먼트 추가
+        if self._last_avail_change_time:
+            last_start = timeline_sec - (current_offset - (self._last_avail_change_time - self._start_time).total_seconds())
+            if last_start < timeline_sec:
+                normalized.append({
+                    "start": max(0, last_start),
+                    "end": timeline_sec,
+                    "isUp": self._last_avail_state if self._last_avail_state is not None else self._is_connected,
                 })
-                segment_start = position
-                current_state = entry["is_up"]
         
-        # 마지막 세그먼트 추가
-        segments.append({
-            "start": segment_start,
-            "end": timeline_sec,
-            "isUp": current_state,
-        })
-        
-        return segments
+        return normalized if normalized else [{"start": 0, "end": timeline_sec, "isUp": self._is_connected}]
 
     # =========================================================================
     # 상태 빌드 (리팩토링됨)
