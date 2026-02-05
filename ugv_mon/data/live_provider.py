@@ -10,8 +10,8 @@ from threading import Lock
 from typing import Dict, List, Optional
 
 from ..config import config
-from ..constants import DEVICE_IDS, DEVICE_NAMES
-from .models import LogEntry, DeviceStatus, EmergencyStatus
+from ..constants import DEVICE_NAMES
+from .models import LogEntry, EmergencyStatus
 
 logger = logging.getLogger(__name__)
 
@@ -209,19 +209,17 @@ class LiveDataProvider:
     # =========================================================================
     
     def generate_initial_data(self) -> Dict:
-        # 장치 상태는 UI 표시용 기본값 (Live에서는 업데이트 안됨)
-        devices = [DeviceStatus(did, name.upper(), False) for did, name in zip(DEVICE_IDS, DEVICE_NAMES)]
-        return self._build_state(devices)
+        """초기 대시보드 데이터 생성."""
+        return self._build_state() 
 
     def update_data(self, prev_data: Dict) -> Dict:
+        """패킷 처리 및 데이터 업데이트."""
         with self._lock:
             self._process_packets()
             self._check_timeout()
             self._update_chart()
-            self._update_availability()  # 5주차: 가용성 히스토리 업데이트
-            # 장치/운용상태는 prev_data 유지 (페이로드 파싱 안함)
-            devices = prev_data.get("devices", [])
-            return self._build_state(devices if isinstance(devices, list) else [])
+            self._update_availability()
+            return self._build_state()
 
     def _process_packets(self):
         if not self._packet_queue or not self._parser:
@@ -403,13 +401,13 @@ class LiveDataProvider:
     # 상태 빌드 (리팩토링됨)
     # =========================================================================
 
-    def _build_state(self, devices: list) -> Dict:
+    def _build_state(self) -> Dict:
         """전체 대시보드 상태 빌드."""
         return {
             **self._build_connection_state(),
             **self._build_stats_state(),
             **self._build_operational_state(),
-            **self._build_ui_state(devices),
+            **self._build_ui_state(),
         }
 
     def _build_connection_state(self) -> Dict:
@@ -457,7 +455,7 @@ class LiveDataProvider:
                 "emergencyStatus": EmergencyStatus().to_dict(),
             }
 
-    def _build_ui_state(self, devices: list) -> Dict:
+    def _build_ui_state(self) -> Dict:
         """UI 렌더링용 필드."""
         # 페이로드에서 장치 상태 추출
         if self._last_payload:

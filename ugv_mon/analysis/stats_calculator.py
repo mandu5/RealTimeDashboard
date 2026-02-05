@@ -61,24 +61,32 @@ class StatsCalculator:
             return jitter_ms
 
     def _calculate_jitter(self, timestamp: datetime, code_data: Dict) -> Tuple[Optional[float], Optional[float]]:
-        """지터 계산 (회사 로직)."""
-        if code_data["timestamp"] is None:
+        """지터 계산 (회사 로직) - 안전 버전."""
+        prev_ts = code_data.get("timestamp")
+        if prev_ts is None:
+            # 첫 샘플
+            code_data["timestamp"] = timestamp
+            code_data["interval"] = None
             return None, None
-        
-        interval_ms = (timestamp - code_data["timestamp"]).total_seconds() * 1000
-        
+
+        interval_ms = (timestamp - prev_ts).total_seconds() * 1000
+
+        # timestamp는 항상 갱신
+        code_data["timestamp"] = timestamp
+
+        # 큰 갭 스킵
         if interval_ms > MAX_GAP_MS:
             code_data["interval"] = None
             return None, interval_ms
-        
+
         prev_interval = code_data.get("interval")
         jitter_ms = None
-        
-        if prev_interval is not None and prev_interval <= MAX_GAP_MS:
-            jitter_ms = abs(interval_ms - prev_interval)
-            if interval_ms - prev_interval > JITTER_THRESHOLD_MS:
-                jitter_ms = None
-        
+
+        if isinstance(prev_interval, (int, float)) and prev_interval <= MAX_GAP_MS:
+            diff = abs(interval_ms - prev_interval)
+            if diff <= JITTER_THRESHOLD_MS:
+                jitter_ms = diff
+
         code_data["interval"] = interval_ms
         return jitter_ms, interval_ms
 
@@ -222,7 +230,7 @@ class StatsCalculator:
             self._last_by_code.clear()
             self._loss_by_code.clear()
 
-    def reset_stream_state(self, clear_records: bool = False, skip_samples: int = 0):
+    def reset_stream_state(self, clear_records: bool = False):
         """스트림 상태 리셋."""
         with self._lock:
             logger.info(f"[STATS] reset_stream_state: clear={clear_records}")
