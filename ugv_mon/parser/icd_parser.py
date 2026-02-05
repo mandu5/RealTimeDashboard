@@ -10,12 +10,12 @@ from typing import TypeVar, Type, Union, Optional
 
 from enum import IntEnum
 
-from .models import (
+from ..core import (
     ICDHeader, ParseResult, MsgCode, AckFlag, DeviceID,
     OperationalPayload, OPERATION_MODES, AUTHORITIES, DRIVING_STATES,
     DEVICE_BIT_NAMES, EMERGENCY_SOURCE_NAMES,
 )
-from ..constants import ICD_HEADER_SIZE, ICD_CHECKSUM_SIZE, ICD_MIN_PACKET_SIZE
+from ..core.constants import ICD_HEADER_SIZE, ICD_CHECKSUM_SIZE, ICD_MIN_PACKET_SIZE
 
 logger = logging.getLogger(__name__)
 

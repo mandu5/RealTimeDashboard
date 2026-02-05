@@ -20,7 +20,7 @@ import dash
 
 from .layouts.main_layout import create_main_layout
 from .callbacks.update_callbacks import register_callbacks
-from .config import config
+from .core import config
 
 # 로거 설정
 logger = logging.getLogger(__name__)

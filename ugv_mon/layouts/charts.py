@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 from typing import Dict, List
 
 from ..styles import get_chart_colors
-from ..config import config
+from ..core import config
 
 
 def create_communication_chart(

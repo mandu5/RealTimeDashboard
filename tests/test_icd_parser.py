@@ -16,8 +16,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ugv_mon.parser.icd_parser import ICDParser
-from ugv_mon.parser.models import ParseResult, MsgCode, DeviceID, AckFlag
-from ugv_mon.constants import ICD_HEADER_SIZE, ICD_CHECKSUM_SIZE, ICD_MIN_PACKET_SIZE
+from ugv_mon.core import ParseResult, MsgCode, DeviceID, AckFlag
+from ugv_mon.core.constants import ICD_HEADER_SIZE, ICD_CHECKSUM_SIZE, ICD_MIN_PACKET_SIZE
 
 
 class TestICDParserBasic:

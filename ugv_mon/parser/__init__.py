@@ -1,11 +1,11 @@
 """
 ICD Parser 패키지.
 
-헤더만 파싱하고 페이로드는 raw로 저장.
-ICD 명세 확정 시 페이로드 파싱 추가 예정.
+VIC-OCS 통신 프로토콜에 따른 ICD 파싱 기능 제공.
+모델 클래스는 core 패키지에서 import.
 """
 
 from .icd_parser import ICDParser
-from .models import ICDHeader, ParseResult, MsgCode, AckFlag, DeviceID
+from ..core import ICDHeader, ParseResult, MsgCode, AckFlag, DeviceID
 
 __all__ = ["ICDParser", "ICDHeader", "ParseResult", "MsgCode", "AckFlag", "DeviceID"]

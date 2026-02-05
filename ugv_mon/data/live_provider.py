@@ -1,4 +1,26 @@
-"""실시간 패킷 캡처 및 분석 - 대시보드 통계 제공."""
+"""
+실시간 패킷 캡처 및 분석 - 대시보드 데이터 제공.
+
+이 모듈은 VIC-OCS 통신 패킷을 실시간으로 캡처하고 분석하여
+대시보드에 표시할 데이터를 제공합니다.
+
+주요 기능:
+    - 네트워크 인터페이스에서 UDP 패킷 캡처 (scapy)
+    - ICD 헤더/페이로드 파싱
+    - 통신 품질 통계 계산 (PPS, 지터, 손실률)
+    - 가용성 세그먼트 추적
+    - 운용 상태 이력 관리 (Phase 4-6)
+
+사용 예시:
+    >>> provider = LiveDataProvider(interface="eno2")
+    >>> provider.start_capture()
+    >>> data = provider.update_data(prev_data)
+    >>> provider.stop_capture()
+
+Note:
+    캡처 기능은 scapy 패키지가 설치되어 있어야 합니다.
+    Mock 모드에서는 MockDataGenerator를 대신 사용합니다.
+"""
 
 import logging
 import os
@@ -9,9 +31,7 @@ from datetime import datetime
 from threading import Lock
 from typing import Dict, List, Optional
 
-from ..config import config
-from ..constants import DEVICE_NAMES
-from .models import LogEntry, EmergencyStatus
+from ..core import config, DEVICE_NAMES, LogEntry, EmergencyStatus
 
 logger = logging.getLogger(__name__)
 

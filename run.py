@@ -31,7 +31,7 @@ logging.basicConfig(
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ugv_mon.app import create_app
-from ugv_mon.config import config
+from ugv_mon.core import config
 
 
 def parse_args():
