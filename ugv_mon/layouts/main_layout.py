@@ -23,7 +23,7 @@ from .panels import (
     create_emergency_stats_panel,
 )
 from ..components.kpi_card import create_kpi_cards_row
-from ..config import config
+from ..core import config
 from ..styles import PAGE_CONTAINER, TWO_COLUMN_GRID, KPI_GRID, FLEX_COLUMN
 
 

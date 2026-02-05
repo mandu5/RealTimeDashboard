@@ -1,4 +1,24 @@
-"""실시간 통계 계산기 - pandas 기반 데이터 분석."""
+"""
+실시간 통신 품질 통계 계산기.
+
+이 모듈은 VIC-OCS 통신 패킷을 분석하여 실시간 통계를 계산합니다.
+
+계산 항목:
+    - PPS (Packets Per Second): 초당 수신 패킷 수
+    - 지터 (Jitter): 패킷 도착 간격의 변동량 (ms)
+    - 패킷 손실: 시퀀스 번호 기반 누락 패킷 수
+    - P95/P99: 지터 백분위수
+
+주요 임계값:
+    - MAX_GAP_MS (3000ms): 스트림 재시작으로 판단하는 갭
+    - MAX_JITTER_MS (200ms): 이상치로 제외할 지터 값
+    - JITTER_THRESHOLD_MS (5ms): 지터 계산 스킵 임계값
+
+사용 예시:
+    >>> calc = StatsCalculator(window_sec=60)
+    >>> jitter = calc.record_packet(datetime.now(), seq=1, size=100)
+    >>> pps = calc.get_pps()
+"""
 
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict, List
@@ -15,7 +35,14 @@ JITTER_THRESHOLD_MS = 5   # 5ms 초과 interval 변화 시 지터 스킵
 
 
 class StatsCalculator:
-    """실시간 통계 계산기 (하이브리드: 리스트 + pandas)."""
+    """실시간 통신 품질 통계 계산기.
+    
+    슬라이딩 윈도우 방식으로 최근 N초간의 패킷을 분석합니다.
+    pandas DataFrame을 활용하여 효율적인 통계 계산을 수행합니다.
+    
+    Attributes:
+        window_sec: 분석 윈도우 크기 (초, 기본 3600)
+    """
 
     def __init__(self, window_sec: int = 3600):
         self._window_sec = window_sec

@@ -1,18 +1,37 @@
 """
-Mock Data Generator - 테스트/개발용 가짜 데이터 생성.
+테스트용 Mock 데이터 생성기.
+
+이 모듈은 개발 및 테스트 환경에서 실제 패킷 캡처 없이
+대시보드를 테스트할 수 있는 가짜 데이터를 생성합니다.
+
+LiveDataProvider와 동일한 인터페이스를 제공하여
+앱 코드 변경 없이 Mock/Live 모드를 전환할 수 있습니다.
+
+사용 예시:
+    >>> generator = MockDataGenerator()
+    >>> initial_data = generator.generate_initial_data()
+    >>> updated_data = generator.update_data(initial_data)
+
+Note:
+    Mock 모드는 환경변수 UGV_MON_USE_LIVE가 설정되지 않았을 때 활성화됩니다.
 """
 
 import random
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-from .models import LogEntry, DeviceStatus, AvailabilitySegment, EmergencyStatus
-from ..config import config
-from ..constants import DEVICE_IDS, DEVICE_NAMES, DEFAULT_INITIAL_SEQUENCE
+from ..core import (
+    config, DEVICE_IDS, DEVICE_NAMES, DEFAULT_INITIAL_SEQUENCE,
+    LogEntry, DeviceStatus, AvailabilitySegment, EmergencyStatus,
+)
 
 
 class MockDataGenerator:
-    """Mock 데이터 생성기."""
+    """Mock 데이터 생성기.
+    
+    실시간 데이터처럼 보이는 랜덤 데이터를 생성합니다.
+    PPS, 지터, 로그, 장치 상태 등을 시뮬레이션합니다.
+    """
 
     def __init__(self):
         self._last_seq = DEFAULT_INITIAL_SEQUENCE

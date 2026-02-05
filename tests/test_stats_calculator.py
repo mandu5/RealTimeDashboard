@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ugv_mon.analysis.stats_calculator import StatsCalculator
-from ugv_mon.constants import SEQ_MODULO, EXPECTED_PPS
+from ugv_mon.core.constants import SEQ_MODULO, EXPECTED_PPS
 
 
 class TestStatsCalculatorBasic:
