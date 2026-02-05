@@ -360,34 +360,38 @@ def create_availability_panel(data: Dict) -> dmc.Card:
 
 def create_connection_history_panel(data: Dict) -> dmc.Card:
     """연결 상태 변경 이력 패널."""
-    history = data.get("connectionHistory", [])
-    
-    if not history:
-        content = dmc.Text("연결 이력 없음", c="dimmed", size="sm")
-    else:
-        rows = []
-        for item in reversed(history[-5:]):  # 최근 5개
-            status = "연결" if item.get("connected") else "끊김"
-            color = "green" if item.get("connected") else "red"
-            duration = item.get("duration")
-            duration_str = f"({duration:.0f}초)" if duration else ""
-            rows.append(
-                dmc.Group([
-                    dmc.Badge(status, color=color, size="sm"),
-                    dmc.Text(item.get("timestamp", "")[:19], size="xs", c="dimmed"),
-                    dmc.Text(duration_str, size="xs", c="dimmed"),
-                ], gap="xs")
-            )
-        content = dmc.Stack(rows, gap="xs")
-    
     return dmc.Card(
         children=[
             _panel_header("연결 이력"),
-            content,
+            html.Div(
+                id="connection-history-container",
+                children=create_connection_history_content(data),
+            ),
         ],
         withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
     )
-
+    
+def create_connection_history_content(data: Dict) -> List:
+    """연결 이력 컨텐츠 생성 (콜백용)."""
+    history = data.get("connectionHistory", [])
+    
+    if not history:
+        return [dmc.Text("연결 이력 없음", c="dimmed", size="sm")]
+    
+    rows = []
+    for item in reversed(history[-5:]):  # 최근 5개
+        status = "연결" if item.get("connected") else "끊김"
+        color = "green" if item.get("connected") else "red"
+        duration = item.get("duration")
+        duration_str = f"({duration:.0f}초)" if duration else ""
+        rows.append(
+            dmc.Group([
+                dmc.Badge(status, color=color, size="sm"),
+                dmc.Text(item.get("timestamp", "")[:19], size="xs", c="dimmed"),
+                dmc.Text(duration_str, size="xs", c="dimmed"),
+            ], gap="xs")
+        )
+    return [dmc.Stack(rows, gap="xs")]
 
 # =============================================================================
 # Phase 5: 운용상태 전이 패널
@@ -395,31 +399,36 @@ def create_connection_history_panel(data: Dict) -> dmc.Card:
 
 def create_mode_transitions_panel(data: Dict) -> dmc.Card:
     """운용 모드 전이 이력 패널."""
-    transitions = data.get("modeTransitions", [])
-    
-    if not transitions:
-        content = dmc.Text("모드 전이 없음", c="dimmed", size="sm")
-    else:
-        rows = []
-        for t in reversed(transitions[-5:]):
-            rows.append(
-                dmc.Group([
-                    dmc.Text(t.get("from", "?"), size="sm", fw=500),
-                    dmc.Text("→", size="sm", c="dimmed"),
-                    dmc.Text(t.get("to", "?"), size="sm", fw=500),
-                    dmc.Text(t.get("timestamp", "")[:19], size="xs", c="dimmed"),
-                ], gap="xs")
-            )
-        content = dmc.Stack(rows, gap="xs")
     
     return dmc.Card(
         children=[
             _panel_header("운용모드 전이"),
-            content,
+            html.Div(
+                id="mode-transitions-container",
+                children=create_mode_transitions_content(data),
+            ),
         ],
         withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
     )
 
+def create_mode_transitions_content(data: Dict) -> List:
+    """운용모드 전이 컨텐츠 생성 (콜백용)."""
+    transitions = data.get("modeTransitions", [])
+    
+    if not transitions:
+        return [dmc.Text("모드 전이 없음", c="dimmed", size="sm")]
+    
+    rows = []
+    for t in reversed(transitions[-5:]):
+        rows.append(
+            dmc.Group([
+                dmc.Text(t.get("from", "?"), size="sm", fw=500),
+                dmc.Text("→", size="sm", c="dimmed"),
+                dmc.Text(t.get("to", "?"), size="sm", fw=500),
+                dmc.Text(t.get("timestamp", "")[:19], size="xs", c="dimmed"),
+            ], gap="xs")
+        )
+    return [dmc.Stack(rows, gap="xs")]
 
 # =============================================================================
 # Phase 6: 비상정지 원인 통계 패널  
@@ -427,30 +436,34 @@ def create_mode_transitions_panel(data: Dict) -> dmc.Card:
 
 def create_emergency_stats_panel(data: Dict) -> dmc.Card:
     """비상정지 원인별 발생 횟수."""
-    counts = data.get("emergencyCounts", {})
-    
-    if not counts:
-        content = dmc.Text("비상정지 발생 없음", c="dimmed", size="sm")
-    else:
-        sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-        rows = []
-        for reason, count in sorted_items[:5]:  # 상위 5개
-            rows.append(
-                dmc.Group([
-                    dmc.Text(reason, size="sm"),
-                    dmc.Badge(str(count), color="red", variant="filled", size="sm"),
-                ], justify="space-between")
-            )
-        content = dmc.Stack(rows, gap="xs")
-    
     return dmc.Card(
         children=[
-            _panel_header("비상정지 원인"),
-            content,
+            _panel_header("비상정지 원인 통계"),
+            html.Div(
+                id="emergency-stats-container",
+                children=create_emergency_stats_content(data),
+            ),
         ],
         withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
     )
 
+def create_emergency_stats_content(data: Dict) -> List:
+    """비상정지 통계 컨텐츠 생성 (콜백용)."""
+    counts = data.get("emergencyCounts", {})
+    
+    if not counts:
+        return [dmc.Text("비상정지 발생 없음", c="dimmed", size="sm")]
+    
+    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+    rows = []
+    for reason, count in sorted_items[:5]:  # 상위 5개
+        rows.append(
+            dmc.Group([
+                dmc.Text(reason, size="sm"),
+                dmc.Badge(str(count), color="red", variant="filled", size="sm"),
+            ], justify="space-between")
+        )
+    return [dmc.Stack(rows, gap="xs")]
 
 # =============================================================================
 # 로그 테이블 패널

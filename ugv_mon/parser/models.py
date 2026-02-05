@@ -142,6 +142,15 @@ class OperationalPayload:
             "emergency_complete": self.emergency_complete,
         }
 
+    @property
+    def is_emergency(self) -> bool:
+        """비상정지 상태 여부 (비상 원인이 1개 이상 존재)."""
+        return len(self.emergency_sources) > 0
+
+    def get_emergency_reasons(self) -> list:
+        """비상정지 원인 리스트 반환."""
+        return self.emergency_sources
+    
     def get_emergency_dict(self) -> Dict[str, bool]:
         """UI용 비상정지 상태 딕셔너리 (처리완료 포함)."""
         emergency_dict = {}

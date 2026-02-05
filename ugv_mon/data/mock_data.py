@@ -72,6 +72,9 @@ class MockDataGenerator:
             "checksumFail": 0.0,
             "packetLoss": 0,
             "availability5min": 99.98,
+            "availability": 99.5,  # Phase 2: 10분 가용성
+            "availabilityHourly": 98.7,  # Phase 2: 1시간 가용성
+            "jitterCurrent": 1.8,
             "jitterP95": 2.1,
             "jitterP99": 2.4,
             "operationalMode": "원격 주행 (REMOTE)",
@@ -81,6 +84,29 @@ class MockDataGenerator:
             "devices": [d.to_dict() for d in devices],
             "emergencyStatus": EmergencyStatus(signal_lost_driving=True).to_dict(),
             "availabilitySegments": [s.to_dict() for s in self._availability_segments],
+            # Phase 3: msg_code별 통계
+            "msgCodeStats": {
+                1: {"pps": 50, "packet_loss": 0, "avg_size": 100, "count": 3000},
+                16: {"pps": 25, "packet_loss": 1, "avg_size": 80, "count": 1500},
+                37: {"pps": 10, "packet_loss": 0, "avg_size": 120, "count": 600},
+                64: {"pps": 15, "packet_loss": 0, "avg_size": 90, "count": 900},
+            },
+            # Phase 4: 연결 이력
+            "connectionHistory": [
+                {"timestamp": (now - timedelta(minutes=30)).isoformat(), "connected": True, "duration": 1800},
+                {"timestamp": (now - timedelta(minutes=5)).isoformat(), "connected": False, "duration": 60},
+                {"timestamp": (now - timedelta(minutes=4)).isoformat(), "connected": True, "duration": None},
+            ],
+            # Phase 5: 모드 전이
+            "modeTransitions": [
+                {"timestamp": (now - timedelta(minutes=20)).isoformat(), "from": "대기", "to": "수동"},
+                {"timestamp": (now - timedelta(minutes=15)).isoformat(), "from": "수동", "to": "원격 주행 (REMOTE)"},
+            ],
+            # Phase 6: 비상정지 통계
+            "emergencyCounts": {
+                "원격 비상정지": 2,
+                "신호단절 주행중": 1,
+            },
         }
 
     def update_data(self, prev_data: Dict) -> Dict:

@@ -8,7 +8,13 @@ from typing import Dict, Protocol, List
 from ..components.kpi_card import create_kpi_cards_row
 from ..layouts.header import create_status_chips
 from ..components.device_grid import create_device_grid
-from ..layouts.panels import create_operational_status_boxes, create_emergency_indicators
+from ..layouts.panels import (
+    create_operational_status_boxes,
+    create_emergency_indicators,
+    create_connection_history_content,
+    create_mode_transitions_content,
+    create_emergency_stats_content,
+)
 from ..layouts.charts import create_communication_chart, create_availability_timeline
 
 logger = logging.getLogger(__name__)
@@ -62,6 +68,10 @@ def _register_component_callback(app, provider) -> None:
             Output("connection-toggle-btn", "children"),
             Output("connection-toggle-btn", "variant"),
             Output("connection-toggle-btn", "color"),
+            # Phase 4-6: 신규 패널 업데이트
+            Output("connection-history-container", "children"),
+            Output("mode-transitions-container", "children"),
+            Output("emergency-stats-container", "children"),
         ],
         Input("dashboard-data", "data"),
     )
@@ -88,6 +98,10 @@ def _register_component_callback(app, provider) -> None:
             btn_children,
             "filled" if is_conn else "outline",
             "green" if is_conn else "red",
+            # Phase 4-6: 신규 패널 컨텐츠
+            create_connection_history_content(data),
+            create_mode_transitions_content(data),
+            create_emergency_stats_content(data),
         )
 
 
