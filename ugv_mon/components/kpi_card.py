@@ -42,7 +42,7 @@ def create_kpi_cards_row(data: dict) -> list:
         create_kpi_card("파싱 성공률", data.get("parseSuccess", 0), "%", True, data.get("parseSuccess", 0), "green"),
         create_kpi_card("체크섬 오류율", data.get("checksumFail", 0), "%"),
         create_kpi_card("추정 패킷 손실", data.get("packetLoss", 0), "pkts"),
-        create_kpi_card("가용성 (5분)", data.get("availability5min", 0), "%", True, data.get("availability5min", 0), "green"),
+        create_kpi_card("가용성 (5분)", data.get("availability", 0), "%", True, data.get("availability", 0), "green"),
         create_kpi_card("지터 (현재)", data.get("jitterCurrent", 0), "ms"),  # 5주차: 추가
         create_kpi_card("지터 (P95/P99)", f"{data.get('jitterP95', 0)} / {data.get('jitterP99', 0)}", "ms"),
     ]
