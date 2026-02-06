@@ -3,7 +3,7 @@ Chart Components for UGV-MON Dashboard.
 
 Provides Plotly chart builders for:
 - PPS time series (packets per second)
-- Jitter time series with P95/P99 reference lines
+- Jitter time series with P95 reference line
 - Availability timeline (up/down segments)
 """
 
@@ -18,20 +18,18 @@ from ..core import config
 def create_communication_chart(
     data: List[Dict],
     p95: float,
-    p99: float,
-    time_range_seconds: int = 60
+    time_range_seconds: int = 60,
 ) -> go.Figure:
     """
     Create combined PPS + Jitter time series chart.
     
     Displays two stacked charts:
     1. Top: Packets per second (PPS) - blue area chart
-    2. Bottom: Jitter (ms) - green area chart with P95/P99 reference lines
+    2. Bottom: Jitter (ms) - green area chart with P95 reference line
     
     Args:
         data: List of dictionaries with 'timestamp', 'pps', 'jitter' keys
         p95: Current P95 jitter value (ms)
-        p99: Current P99 jitter value (ms)
         time_range_seconds: Time range to display in seconds (30, 60, or 300)
         
     Returns:
@@ -42,7 +40,7 @@ def create_communication_chart(
         ...     {"timestamp": "14:32:05", "pps": 1024, "jitter": 1.5},
         ...     ...
         ... ]
-        >>> fig = create_communication_chart(data, 2.1, 2.4, 60)
+        >>> fig = create_communication_chart(data, 2.1, 60)
     """
     colors = get_chart_colors()
     
@@ -104,17 +102,6 @@ def create_communication_chart(
         line_dash="dash",
         line_color=colors["p95_line"],
         annotation_text=f"P95: {p95}ms",
-        annotation_position="right",
-        row=2,
-        col=1,
-    )
-    
-    # P99 reference line
-    fig.add_hline(
-        y=p99,
-        line_dash="dash",
-        line_color=colors["p99_line"],
-        annotation_text=f"P99: {p99}ms",
         annotation_position="right",
         row=2,
         col=1,

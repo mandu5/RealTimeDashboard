@@ -22,8 +22,9 @@ from typing import Dict, List
 
 from ..core import (
     config, DEVICE_IDS, DEVICE_NAMES, DEFAULT_INITIAL_SEQUENCE,
-    LogEntry, DeviceStatus, AvailabilitySegment, EmergencyStatus,
+    LogEntry, DeviceStatus, AvailabilitySegment,
 )
+from ..core.models import EMERGENCY_SOURCE_NAMES
 
 
 class MockDataGenerator:
@@ -97,13 +98,15 @@ class MockDataGenerator:
             "availabilityHourly": 98.7,     # 1시간 가용성
             "jitterCurrent": 1.8,
             "jitterP95": 2.1,
-            "jitterP99": 2.4,
             "operationalMode": "원격 주행 (REMOTE)",
             "operationalAuthority": "OCS(운용통제기)",
             "drivingState": "전진/대기",
             "combinedData": chart_data,
             "devices": [d.to_dict() for d in devices],
-            "emergencyStatus": EmergencyStatus(signal_lost_driving=True).to_dict(),
+            "emergencyStatus": {
+                name: (name == "통신이상")
+                for name in EMERGENCY_SOURCE_NAMES
+            } | {"처리완료": False},
             "availabilitySegments": [s.to_dict() for s in self._availability_segments],
             # Phase 3: msg_code별 통계
             "msgCodeStats": {
@@ -163,7 +166,6 @@ class MockDataGenerator:
             "lastPacketTime": now.strftime("%H:%M:%S"),
             "capturePps": random.randint(1000, 1100) if update_kpi else prev_data.get("capturePps", 1000),
             "jitterP95": round(random.uniform(1.5, 2.5), 1),
-            "jitterP99": round(random.uniform(2.0, 2.8), 1),
             "combinedData": chart_data,
         }
 

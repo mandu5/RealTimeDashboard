@@ -29,7 +29,8 @@ from .models import (
     DeviceStatus,
     LogEntry,
     AvailabilitySegment,
-    EmergencyStatus,
+    # 헬퍼
+    build_default_emergency_dict,
 )
 
 from .config import config
@@ -52,7 +53,7 @@ __all__ = [
     "OPERATION_MODES", "AUTHORITIES", "DRIVING_STATES", "DEVICE_BIT_NAMES", "EMERGENCY_SOURCE_NAMES",
     # 모델
     "ICDHeader", "OperationalPayload", "ParseResult",
-    "DeviceStatus", "LogEntry", "AvailabilitySegment", "EmergencyStatus",
+    "DeviceStatus", "LogEntry", "AvailabilitySegment", "build_default_emergency_dict",
     # 설정/상수
     "config",
     "DEVICE_IDS", "DEVICE_NAMES", "DEVICE_ID_TO_NAME",

@@ -45,7 +45,6 @@ class StatsState(TypedDict):
         availabilityHourly: 1시간 가용성 (%)
         jitterCurrent: 현재 지터 (ms)
         jitterP95: 지터 95번째 백분위 (ms)
-        jitterP99: 지터 99번째 백분위 (ms)
     """
     capturePps: int
     parseSuccess: float
@@ -55,7 +54,6 @@ class StatsState(TypedDict):
     availabilityHourly: float
     jitterCurrent: float
     jitterP95: float
-    jitterP99: float
 
 
 class OperationalState(TypedDict):
@@ -189,7 +187,7 @@ DATA_KEYS = {
     "stats": [
         "capturePps", "parseSuccess", "checksumFail", "packetLoss",
         "availability", "availabilityHourly",
-        "jitterCurrent", "jitterP95", "jitterP99"
+        "jitterCurrent", "jitterP95"
     ],
     "operational": ["operationalMode", "operationalAuthority", "drivingState", "emergencyStatus"],
     "ui": [

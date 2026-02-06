@@ -170,20 +170,22 @@ def update_data(n, is_paused):
     return provider.get_current_data()
 ```
 
-### 4.4. 통계 계산 (stats_calculator.py)
+### 4.4. 통합 저장소 (packet_store.py)
 
 ```python
-# 하이브리드 방식: 리스트 저장 + 필요시 pandas 변환
-def record_packet(self, timestamp, sequence, size, msg_code=0):
-    self._records.append({
-        "timestamp": timestamp,
-        "msg_code": msg_code,
-        "jitter_ms": jitter_ms,
+# 단일 deque에 모든 PacketRecord 저장, 용도별 변환 제공
+class PacketStore:
+    def add(self, record: PacketRecord) -> Optional[float]:
+        # 지터 계산 + 패킷 손실 추적 + deque 저장
         ...
-    })
-    
-def _get_df(self) -> pd.DataFrame:
-    return pd.DataFrame(self._records)
+
+    def get_stats_dict(self) -> Dict:
+        # PPS, 지터, 손실, 가용성 등 KPI 통계
+        ...
+
+    def get_chart_data(self, limit=180) -> List[Dict]:
+        # 차트 표시용 시계열 데이터
+        ...
 ```
 
 ---
@@ -200,13 +202,13 @@ def _get_df(self) -> pd.DataFrame:
 [PacketQueue] ─── (timestamp, bytes)
     │
     ▼
-[ICDParser] ─── ParseResult (header + payload)
+[PacketProcessor] ─── 파싱 + PacketStore 저장
     │
     ▼
-[StatsCalculator] ─── List[Dict] → pd.DataFrame
+[PacketStore] ─── deque[PacketRecord] (단일 저장소)
     │
     ▼
-[LiveDataProvider.get_current_data()]
+[LiveDataProvider._build_dashboard_data()]
     │
     ▼
 [dcc.Store("dashboard-data")] ─── JSON (Dict)
@@ -237,16 +239,12 @@ def _get_df(self) -> pd.DataFrame:
 
 | 모듈 | 테스트 수 | 커버리지 |
 |------|----------|----------|
-| stats_calculator | 20 | 핵심 로직 |
-| icd_parser | 8 | 파싱 검증 |
-| 기타 | 5 | 유틸리티 |
-| **총계** | **33** | **통과** |
+| icd_parser | 8+ | ICD 파싱 검증 |
 
 ### 7.2. 테스트 실행
 
 ```bash
-$ python -m pytest tests/ -q
-33 passed in 2.39s
+$ python -m pytest tests/ -v
 ```
 
 ---
@@ -255,17 +253,20 @@ $ python -m pytest tests/ -q
 
 ```
 ugv_mon/
-├── analysis/
-│   └── stats_calculator.py    # 통계 계산 (하이브리드)
+├── core/
+│   ├── models.py              # 통합 데이터 모델
+│   ├── config.py              # 앱 설정
+│   └── constants.py           # 상수 정의
 ├── capture/
 │   ├── sniffer.py             # 패킷 캡처
-│   └── packet_queue.py        # 스레드 안전 큐
-├── parsing/
-│   ├── icd_parser.py          # ICD 파싱
-│   └── models.py              # 데이터 모델
+│   ├── queue.py               # 스레드 안전 큐
+│   └── packet_processor.py    # 처리 파이프라인
+├── parser/
+│   └── icd_parser.py          # ICD 파싱 (비트마스킹)
 ├── data/
-│   ├── live_provider.py       # 실시간 데이터
-│   └── mock_provider.py       # 모의 데이터
+│   ├── packet_store.py        # 통합 저장소 (단일 deque)
+│   ├── live_provider.py       # 실시간 데이터 제공
+│   └── mock_data.py           # 모의 데이터
 ├── layouts/
 │   ├── main_layout.py         # 메인 레이아웃
 │   ├── panels.py              # UI 패널들

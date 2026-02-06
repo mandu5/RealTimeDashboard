@@ -91,7 +91,7 @@ def _register_component_callback(app, provider) -> None:
             create_operational_status_boxes(data),
             create_emergency_indicators(data.get("emergencyStatus", {})),
             create_device_grid(data.get("devices", [])),
-            create_communication_chart(chart_data, data.get("jitterP95", 0), data.get("jitterP99", 0), 60),
+            create_communication_chart(chart_data, data.get("jitterP95", 0), 60),
             create_availability_timeline(data.get("availabilitySegments", [])),
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
@@ -124,15 +124,7 @@ def _register_control_callbacks(app, provider) -> None:
 
 
 def _register_ui_callbacks(app, provider) -> None:
-    """UI 제어 콜백 (인터페이스, 연결, 방향)."""
-    @app.callback(Output("dashboard-data", "data", allow_duplicate=True),
-                  Input("interface-select", "value"), State("dashboard-data", "data"), prevent_initial_call=True)
-    def on_interface_change(new_interface, current_data):
-        if hasattr(provider, 'switch_interface') and provider.switch_interface(new_interface):
-            logger.info(f"Interface switched to: {new_interface}")
-            return provider.update_data(current_data)
-        raise PreventUpdate
-    
+    """UI 제어 콜백 (연결, 방향)."""
     @app.callback(
         [Output("connection-toggle-btn", "children", allow_duplicate=True),
          Output("connection-toggle-btn", "variant", allow_duplicate=True),

@@ -47,8 +47,8 @@ A: raw socket 접근이 필요하기 때문입니다.
 from .sniffer import PacketSniffer
 from .queue import PacketQueue
 from .stats import CaptureStats
-from .packet_processor import PacketProcessor, ProcessedResult
+from .packet_processor import PacketProcessor, BatchProcessResult
 
 # __all__: `from capture import *` 시 노출되는 이름 목록
 # 명시적으로 지정하지 않으면 모든 public 이름이 노출됨
-__all__ = ["PacketSniffer", "PacketQueue", "CaptureStats", "PacketProcessor", "ProcessedResult"]
+__all__ = ["PacketSniffer", "PacketQueue", "CaptureStats", "PacketProcessor", "BatchProcessResult"]
