@@ -82,17 +82,19 @@ class MockDataGenerator:
                 devices.append(DeviceStatus(device_id, name, connected=True))
 
         return {
+            # 연결 상태 (5개)
             "connected": True,
             "interface": config.network.interface,
+            "direction": "status",  # 4주차 추가: 캡처 방향
             "filter": f"{config.network.vic_port}→{config.network.ocs_port}",
             "lastPacketTime": now.strftime("%H:%M:%S"),
+            # 통계 (9개)
             "capturePps": 1024,
             "parseSuccess": 100.0,
             "checksumFail": 0.0,
             "packetLoss": 0,
-            "availability5min": 99.98,
-            "availability": 99.5,  # Phase 2: 10분 가용성
-            "availabilityHourly": 98.7,  # Phase 2: 1시간 가용성
+            "availability": 99.5,           # 5분 가용성
+            "availabilityHourly": 98.7,     # 1시간 가용성
             "jitterCurrent": 1.8,
             "jitterP95": 2.1,
             "jitterP99": 2.4,
