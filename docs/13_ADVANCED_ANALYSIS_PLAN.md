@@ -1,397 +1,254 @@
-# UGV-MON 고차원 데이터 분석 계획
+# UGV-MON 최종 개선 및 어필 포인트
 
-> **작성일**: 2026-02-05  
-> **목적**: 인턴십 마지막 2주간 진행할 고차원 분석 아이디어 정리  
-> **원칙**: AI/ML은 유의미한 경우에만 사용, 과도한 사용은 마이너스
-
----
-
-## 📊 현재 보유 데이터 분석
-
-### 1. 실시간 수집 데이터
-
-| 데이터 | 수집 빈도 | 타입 | 분석 가치 |
-|--------|----------|------|----------|
-| **PPS** (Packets Per Second) | 매 초 | 정수 | ⭐⭐⭐ 네트워크 부하/상태 |
-| **Jitter** (P95/P99) | 매 초 | 실수 (ms) | ⭐⭐⭐ 네트워크 품질 |
-| **Packet Loss** | 누적 | 정수 | ⭐⭐ 통신 신뢰성 |
-| **Availability** | 5분/1시간 | % | ⭐⭐⭐ 시스템 안정성 |
-
-### 2. 운용 상태 데이터
-
-| 데이터 | 값 | 분석 가치 |
-|--------|-----|----------|
-| **Operation Mode** | 준비/무인주행/유인주행/비상정지/점검/원격 | ⭐⭐⭐ 모드별 통신 특성 |
-| **Authority** | 없음/OCS/근거리조종기/VIC | ⭐⭐ 권한별 패턴 |
-| **Driving State** | 정지/전진/후진/회전 | ⭐⭐ 주행 중 통신 품질 |
-
-### 3. 이벤트 데이터
-
-| 데이터 | 내용 | 분석 가치 |
-|--------|------|----------|
-| **Emergency Events** | 비상정지 원인 (10종) | ⭐⭐⭐ 패턴/예측 |
-| **Mode Transitions** | 운용모드 전이 이력 | ⭐⭐ 상태 변화 분석 |
-| **Connection History** | 연결/끊김 이력 | ⭐⭐⭐ 안정성 분석 |
-| **Device Status** | 10개 장치 연결 상태 | ⭐⭐ 고장 패턴 |
-
-### 4. msg_code별 통계
-
-| msg_code | 의미 | 빈도 |
-|----------|------|------|
-| 0x01 | 운용 상태 메시지 | ~100 PPS |
-| 0x10 | 원격 제어 메시지 | 80~110 Hz |
-| 0x25 | Heartbeat | 낮음 |
-| 0x40 | 기타 | 낮음 |
+> **작성일**: 2026-02-04  
+> **목적**: 인턴십 마지막 기간 동안 어필할 수 있는 포인트 정리  
+> **원칙**: AI/ML은 진짜 의미 있을 때만, 엔지니어링 품질이 핵심
 
 ---
 
-## 🎯 분석 아이디어 (우선순위순)
+## 📌 핵심 질문
 
-### Phase 1: 통계 기반 분석 (ML 불필요) ⭐⭐⭐
+> "이 프로젝트에서 AI/ML이 정말 필요한가?"
 
-#### 1.1 상관관계 분석
+**솔직한 답변**: 대부분 **아니오**.
 
-**목적**: 지터↔패킷손실, PPS↔가용성 등 변수 간 관계 파악
+- 실시간 모니터링 = 단순하고 빠른 게 최고
+- 데이터 양 = ML 학습에 부족 (100 PPS × 몇 시간)
+- 폐쇄망 = 복잡한 라이브러리 유지보수 어려움
+- 해석 가능성 = 운용자가 "왜?"에 답할 수 있어야 함
 
-```python
-# 구현 예시
-import pandas as pd
+**결론**: AI/ML 억지로 넣으면 **마이너스**. 엔지니어링 품질이 더 중요.
 
-df = stats_calc.get_dataframe()
+---
 
-# 피어슨 상관계수
-correlations = df[['jitter_ms', 'interval_ms', 'size']].corr()
+## ⭐ 이미 완성된 어필 포인트 (강조할 것)
 
-# 시각화: 히트맵
+### 1. 실시간 아키텍처 설계
+
+```
+100 PPS 처리 가능한 파이프라인:
+UDP → PacketQueue → PacketProcessor → PacketStore → UI
+     (deque)        (파이프라인)       (단일저장소)   (2초 갱신)
 ```
 
-**기대 결과**:
-- 지터 증가 → 패킷 손실 증가 여부
-- PPS 감소 → 가용성 하락 선행 지표 여부
+**어필**: "100 PPS 실시간 처리가 가능한 파이프라인을 설계했습니다. deque 기반 버퍼링과 단일 저장소 패턴으로 메모리 효율과 성능을 모두 확보했습니다."
 
-**난이도**: 낮음 | **가치**: 높음 | **ML 필요**: ❌
+### 2. 책임 분리 리팩토링
+
+```
+Before: live_provider.py (6가지 책임 혼재)
+After:  packet_processor.py (처리) + packet_store.py (저장) + live_provider.py (제공)
+```
+
+**어필**: "단일 책임 원칙을 적용해 6가지 책임이 혼재된 코드를 3개 모듈로 분리했습니다. 테스트 용이성과 유지보수성이 향상되었습니다."
+
+### 3. 통합 저장소 패턴
+
+```
+Before: 2곳에 중복 저장 (stats_calculator + live_provider)
+After:  PacketStore 단일 소스 (Single Source of Truth)
+```
+
+**어필**: "중복 저장으로 인한 데이터 불일치 위험을 제거하고, 단일 소스 패턴을 적용했습니다."
+
+### 4. 타입 안전성
+
+```
+Before: Dict, List[Dict] (런타임 에러 가능)
+After:  PacketRecord(dataclass), DashboardData(TypedDict)
+```
+
+**어필**: "dataclass와 TypedDict를 활용해 타입 안전성을 확보하고, IDE 자동완성과 정적 분석을 지원합니다."
+
+### 5. 테스트 커버리지
+
+```
+33개 단위 테스트:
+- ICD 파서 테스트 (13개)
+- 통계 계산 테스트 (20개)
+```
+
+**어필**: "핵심 비즈니스 로직에 대한 단위 테스트를 작성하여 코드 품질을 보장합니다."
 
 ---
 
-#### 1.2 운용모드별 통신 품질 비교
+## 🎯 추가로 할 수 있는 것 (현실적)
 
-**목적**: "무인주행" vs "유인주행" 등 모드별 지터/PPS 차이 분석
+### Option A: 통계 기반 이상 탐지 강화 (ML 불필요)
 
+**현재 상태**: anomaly_detector.py 존재하지만 기본적
+
+**개선 방향**:
 ```python
-# 구현 예시
-df_with_mode = df.merge(mode_history, on='timestamp')
-grouped = df_with_mode.groupby('operation_mode').agg({
-    'jitter_ms': ['mean', 'std', 'quantile'],
-    'pps': ['mean', 'std'],
-})
+# Z-score + IQR 복합 탐지
+def detect_anomaly(value: float, history: list) -> Tuple[bool, str]:
+    """이상 탐지 + 이유 설명."""
+    z_alert = abs(value - mean) / std > 3.0
+    iqr_alert = value < q1 - 1.5*iqr or value > q3 + 1.5*iqr
+    
+    if z_alert and iqr_alert:
+        return True, "Z-score와 IQR 모두 이상치"
+    elif z_alert:
+        return True, f"Z-score {z:.1f} (임계값 3.0 초과)"
+    ...
 ```
 
-**기대 결과**:
-- 특정 모드에서 통신 품질 저하 패턴 발견
-- 운용 권장사항 도출 가능
+**어필**: "통계 기반 이상 탐지를 구현했습니다. Z-score와 IQR을 복합적으로 사용하여 이상치 탐지 정확도를 높이고, **왜 이상인지 설명할 수 있습니다**."
 
-**난이도**: 낮음 | **가치**: 높음 | **ML 필요**: ❌
+**난이도**: 낮음 | **시간**: 1일 | **ML 필요**: ❌
 
 ---
 
-#### 1.3 시간대별 패턴 분석
+### Option B: 비상정지 선행 지표 분석 (가치 높음)
 
-**목적**: 특정 시간대에 문제가 집중되는지 분석
+**아이디어**: 비상정지 발생 전 30초간 지터/PPS 패턴 분석
 
 ```python
-# 구현 예시
-df['hour'] = df['timestamp'].dt.hour
-hourly_stats = df.groupby('hour').agg({
-    'jitter_ms': 'mean',
-    'packet_loss': 'sum',
-})
+# 비상정지 전 데이터 vs 정상 데이터 비교
+normal_jitter_avg = 2.5ms
+pre_emergency_jitter_avg = 8.3ms  # 3.3배 높음!
+
+# 발견: "비상정지 전 지터가 평균 3배 이상 상승"
 ```
 
-**기대 결과**:
-- 특정 시간대 네트워크 혼잡 패턴
-- 운용 스케줄 최적화 제안
+**어필**: "비상정지 이벤트 전 30초간의 통신 품질 패턴을 분석한 결과, **지터가 평균 대비 3배 이상 상승하는 선행 지표**를 발견했습니다. 이를 활용해 예방적 경고가 가능합니다."
 
-**난이도**: 낮음 | **가치**: 중간 | **ML 필요**: ❌
+**난이도**: 중간 | **시간**: 2-3일 | **ML 필요**: ❌
 
 ---
 
-### Phase 2: 이상 탐지 (경량 ML 가능) ⭐⭐⭐
+### Option C: 운용모드별 통신 품질 비교 (인사이트 도출)
 
-#### 2.1 통계 기반 이상 탐지 (ML 불필요)
-
-**목적**: Z-score, IQR 기반 지터/PPS 이상치 탐지
+**아이디어**: "무인주행" vs "유인주행" 등 모드별 품질 차이
 
 ```python
-# 현재 anomaly_detector.py 확장
-def detect_anomaly_zscore(value: float, history: list, threshold: float = 3.0) -> bool:
-    """Z-score 기반 이상 탐지."""
-    if len(history) < 30:
-        return False
-    mean = np.mean(history)
-    std = np.std(history)
-    if std == 0:
-        return False
-    z_score = abs(value - mean) / std
-    return z_score > threshold
+# 분석 결과 예시
+무인주행: 평균 지터 2.1ms, P99 4.5ms
+유인주행: 평균 지터 3.8ms, P99 8.2ms  # 80% 높음
 
-def detect_anomaly_iqr(value: float, history: list) -> bool:
-    """IQR 기반 이상 탐지."""
-    q1 = np.percentile(history, 25)
-    q3 = np.percentile(history, 75)
-    iqr = q3 - q1
-    lower = q1 - 1.5 * iqr
-    upper = q3 + 1.5 * iqr
-    return value < lower or value > upper
+# 인사이트: "유인주행 모드에서 통신 품질이 낮음 → 원인 조사 필요"
 ```
 
-**장점**:
-- 해석 가능 (왜 이상인지 설명 가능)
-- 추가 라이브러리 불필요
-- 실시간 적용 가능
+**어필**: "운용 모드별 통신 품질을 비교 분석한 결과, 특정 모드에서 지터가 80% 높은 패턴을 발견했습니다. 이를 통해 **운용 최적화 포인트**를 식별할 수 있습니다."
 
-**난이도**: 낮음 | **가치**: 높음 | **ML 필요**: ❌
+**난이도**: 낮음 | **시간**: 1일 | **ML 필요**: ❌
 
 ---
 
-#### 2.2 Isolation Forest 기반 이상 탐지 (경량 ML)
+### Option D: Isolation Forest (유일하게 정당화 가능한 ML)
 
-**목적**: 다변량 이상 탐지 (지터+PPS+패킷손실 동시 고려)
+**언제 의미있나?**
+- 지터만 보면 정상인데, PPS+지터+손실률 조합으로 보면 이상한 경우
+- 단일 변수 통계로는 못 잡는 "복합 이상" 탐지
 
 ```python
-# 구현 예시 (sklearn 필요)
-from sklearn.ensemble import IsolationForest
+# 예시: 각각은 정상 범위지만 조합이 이상한 경우
+지터: 5ms (정상 범위 내)
+PPS: 80 (정상 범위 내)
+손실률: 2% (정상 범위 내)
 
-# 특성 추출
-features = df[['jitter_ms', 'pps', 'packet_loss_rate']].fillna(0)
-
-# 모델 학습 (비지도 학습)
-model = IsolationForest(contamination=0.05, random_state=42)
-df['anomaly'] = model.fit_predict(features)
+# 하지만 "지터 높음 + PPS 낮음 + 손실 있음" 조합은 이상!
 ```
 
-**사용 조건**:
+**어필**: "단일 변수 통계로는 탐지하기 어려운 **복합 이상 패턴**을 Isolation Forest로 탐지합니다. 비지도 학습으로 정상 패턴을 학습하고, 이상치를 자동 식별합니다."
+
+**주의**: 
 - sklearn 사전 설치 필요
-- 충분한 학습 데이터 필요 (최소 1시간 이상)
+- 충분한 데이터 필요 (최소 1시간)
+- **통계로 안 될 때만** 사용
 
-**장점**:
-- 복합적인 이상 패턴 탐지
-- 단일 변수로는 못 잡는 이상치 발견
-
-**단점**:
-- 블랙박스 (왜 이상인지 설명 어려움)
-- 오탐 가능성
-
-**난이도**: 중간 | **가치**: 중간 | **ML 필요**: ⚠️ 신중히 검토
+**난이도**: 중간 | **시간**: 2일 | **ML 필요**: ⚠️ 조건부
 
 ---
 
-### Phase 3: 예측 분석 (ML 선택적) ⭐⭐
+## 🚫 하지 않을 것 (명확히)
 
-#### 3.1 이동평균 기반 추세 예측 (ML 불필요)
+| 기술 | 이유 |
+|------|------|
+| LLM/ChatGPT | 구조화된 숫자 데이터에 LLM은 낭비 |
+| 딥러닝 (LSTM) | 데이터 양 부족, 해석 불가 |
+| 복잡한 앙상블 | 유지보수 불가 |
+| AutoML | 폐쇄망에서 의미 없음 |
 
-**목적**: 향후 가용성/지터 추세 예측
+---
 
-```python
-# 단순 이동평균
-df['jitter_ma_5'] = df['jitter_ms'].rolling(window=5).mean()
-df['jitter_ma_20'] = df['jitter_ms'].rolling(window=20).mean()
+## 📋 추천 우선순위
 
-# 추세 판단
-if df['jitter_ma_5'].iloc[-1] > df['jitter_ma_20'].iloc[-1] * 1.2:
-    alert("지터 상승 추세 감지")
+### 1순위: 이미 완성된 것 강조 (발표/문서화)
+
+- 실시간 아키텍처
+- 책임 분리 리팩토링
+- 통합 저장소 패턴
+- 타입 안전성
+- 테스트 커버리지
+
+### 2순위: 빠르게 추가 가능한 것
+
+| 작업 | 시간 | 가치 |
+|------|------|------|
+| 이상 탐지 강화 (Z-score+IQR) | 1일 | 높음 |
+| 운용모드별 품질 비교 | 1일 | 중간 |
+| 시각화 개선 (히트맵 등) | 1일 | 중간 |
+
+### 3순위: 시간 있으면
+
+| 작업 | 시간 | 가치 |
+|------|------|------|
+| 비상정지 선행 지표 | 2-3일 | 매우 높음 |
+| Isolation Forest | 2일 | 조건부 |
+
+---
+
+## 💡 최종 어필 전략
+
+### "AI를 썼다"보다 중요한 것:
+
+1. **문제를 이해하고 해결했다**
+   - "100 PPS 실시간 처리가 필요해서 이런 아키텍처를 설계했습니다"
+
+2. **코드 품질**
+   - "단일 책임 원칙, 타입 안전성, 테스트 커버리지"
+
+3. **실용적 가치**
+   - "이 분석으로 비상정지 예방이 가능합니다"
+
+4. **기술 선택의 근거**
+   - "AI가 아닌 통계를 선택한 이유는..."
+
+### 면접에서 어필할 포인트:
+
+```
+Q: "AI/ML을 사용하셨나요?"
+
+A: "실시간 모니터링 시스템에서 AI/ML의 필요성을 검토했습니다. 
+    결론적으로 대부분의 경우 통계 기반 접근이 더 적합했습니다.
+    
+    이유:
+    1. 해석 가능성 - 운용자가 '왜 경고인지' 알아야 함
+    2. 유지보수 - 폐쇄망 환경에서 복잡한 모델은 부담
+    3. 데이터 양 - ML 학습에 충분치 않음
+    
+    대신 Z-score, IQR 기반 이상 탐지와 
+    비상정지 선행 지표 분석을 구현했습니다.
+    
+    다만 '복합 이상 패턴' 탐지에는 Isolation Forest가 
+    유의미할 수 있어 조건부로 준비했습니다."
 ```
 
-**장점**:
-- 단순하고 해석 가능
-- 실시간 적용 가능
-- 추가 라이브러리 불필요
+---
 
-**난이도**: 낮음 | **가치**: 중간 | **ML 필요**: ❌
+## 📊 성공 기준
+
+### ✅ 성공:
+- 발표에서 "왜 이렇게 했는지" 설명 가능
+- 실제 운용에 도움되는 인사이트 1개 이상
+- 코드 품질에 대한 긍정적 피드백
+
+### ❌ 실패:
+- "AI 썼어요" 외에 설명 못 함
+- 과도한 복잡성으로 유지보수 불가
+- 의미 없는 분석 결과
 
 ---
 
-#### 3.2 ARIMA/지수평활법 (경량 시계열 예측)
-
-**목적**: 향후 N분 후 가용성 예측
-
-```python
-# statsmodels 필요
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-
-model = ExponentialSmoothing(
-    df['availability'], 
-    trend='add', 
-    seasonal=None
-).fit()
-forecast = model.forecast(steps=10)  # 향후 10분 예측
-```
-
-**사용 조건**:
-- statsmodels 사전 설치 필요
-- 최소 30분 이상 데이터 필요
-
-**난이도**: 중간 | **가치**: 중간 | **ML 필요**: ⚠️ 필요시만
-
----
-
-### Phase 4: 비상정지 원인 분석 ⭐⭐⭐
-
-#### 4.1 비상정지 선행 지표 분석 (ML 불필요)
-
-**목적**: 비상정지 발생 전 N초간 지터/PPS 패턴 분석
-
-```python
-# 비상정지 이벤트 전 30초 데이터 추출
-def get_pre_emergency_data(emergency_time: datetime, window_sec: int = 30):
-    start = emergency_time - timedelta(seconds=window_sec)
-    return df[(df['timestamp'] >= start) & (df['timestamp'] < emergency_time)]
-
-# 정상 구간과 비교
-normal_jitter_mean = df[df['is_normal']]['jitter_ms'].mean()
-pre_emergency_jitter_mean = pre_emergency_df['jitter_ms'].mean()
-
-if pre_emergency_jitter_mean > normal_jitter_mean * 1.5:
-    print("비상정지 전 지터 상승 패턴 발견!")
-```
-
-**기대 결과**:
-- 비상정지 발생 전 경고 가능한 선행 지표 발견
-- "통신이상" 비상정지 예측 가능성
-
-**난이도**: 중간 | **가치**: 매우 높음 | **ML 필요**: ❌
-
----
-
-#### 4.2 비상정지 원인 클러스터링 (선택적 ML)
-
-**목적**: 비상정지 원인별 패턴 그룹화
-
-```python
-# 각 비상정지 이벤트의 특성 추출
-features = []
-for event in emergency_events:
-    pre_data = get_pre_emergency_data(event['timestamp'])
-    features.append({
-        'jitter_mean': pre_data['jitter_ms'].mean(),
-        'jitter_std': pre_data['jitter_ms'].std(),
-        'pps_mean': pre_data['pps'].mean(),
-        'packet_loss': pre_data['packet_loss'].sum(),
-    })
-
-# K-means 클러스터링 (sklearn 필요)
-from sklearn.cluster import KMeans
-kmeans = KMeans(n_clusters=3).fit(features_df)
-```
-
-**주의**: 비상정지 이벤트가 충분히 많아야 의미 있음 (최소 20개 이상)
-
-**난이도**: 높음 | **가치**: 조건부 높음 | **ML 필요**: ⚠️ 데이터 충분시만
-
----
-
-## 🚫 사용하지 않을 것들 (오버엔지니어링)
-
-### ❌ LLM 기반 로그 분석
-- **이유**: 구조화된 데이터에 LLM은 과도함
-- **대안**: 규칙 기반 알림으로 충분
-
-### ❌ 딥러닝 시계열 예측 (LSTM 등)
-- **이유**: 데이터 양 부족, 해석 불가
-- **대안**: 이동평균/ARIMA로 충분
-
-### ❌ 복잡한 앙상블 모델
-- **이유**: 폐쇄망 환경에서 유지보수 어려움
-- **대안**: 단일 해석 가능 모델
-
-### ❌ 실시간 강화학습
-- **이유**: 모니터링 시스템에 부적합
-- **대안**: 규칙 기반 임계값 조정
-
----
-
-## 📋 구현 우선순위 (2주 계획)
-
-### Week 1: 통계 분석 기반 확장
-
-| 일 | 작업 | 난이도 | ML |
-|---|------|-------|-----|
-| 1-2 | 상관관계 분석 구현 + 시각화 | 낮음 | ❌ |
-| 3 | 운용모드별 통계 비교 | 낮음 | ❌ |
-| 4-5 | Z-score/IQR 이상 탐지 강화 | 낮음 | ❌ |
-
-### Week 2: 고급 분석 + 최종 정리
-
-| 일 | 작업 | 난이도 | ML |
-|---|------|-------|-----|
-| 1-2 | 비상정지 선행 지표 분석 | 중간 | ❌ |
-| 3 | 이동평균 추세 예측 | 낮음 | ❌ |
-| 4 | (데이터 충분시) Isolation Forest 시도 | 중간 | ⚠️ |
-| 5 | 최종 문서화 + 발표 준비 | - | - |
-
----
-
-## 🔧 필요 라이브러리 (폐쇄망 설치 요청)
-
-### 필수 (이미 있음)
-- `pandas` ✅
-- `numpy` ✅
-- `plotly` ✅
-
-### 선택적 (ML 사용 시)
-- `scikit-learn` - Isolation Forest, K-means
-- `statsmodels` - ARIMA, 지수평활법
-
-### 설치 불필요 (사용 안 함)
-- `tensorflow` / `pytorch` - 오버킬
-- `transformers` - LLM 불필요
-- `prophet` - 복잡도 대비 효과 낮음
-
----
-
-## 📊 성공 지표
-
-### 분석이 "유의미"하다고 판단할 기준:
-
-1. **상관관계 분석**
-   - 상관계수 |r| > 0.5인 변수 쌍 발견
-   - 운용에 활용 가능한 인사이트 도출
-
-2. **이상 탐지**
-   - 기존 대비 False Positive 감소
-   - 실제 문제 상황 사전 감지 사례
-
-3. **비상정지 분석**
-   - 특정 패턴 발견 (예: 지터 급증 후 30초 내 비상정지)
-   - 예측 정확도 > 70%
-
-### 분석이 "과도"하다고 판단할 기준:
-
-- 단순 규칙으로 동일 결과 가능
-- 해석 불가능한 블랙박스 결과
-- 유지보수 비용 > 효과
-- 데이터 부족으로 과적합
-
----
-
-## 💡 핵심 원칙
-
-> **"AI를 쓰면 좋겠다"가 아니라 "이 문제를 풀기 위해 AI가 필요한가?"**
-
-1. **통계로 충분하면 통계로** - 해석 가능성 우선
-2. **ML은 통계로 안 될 때만** - 복합 패턴, 다변량 분석
-3. **딥러닝은 금지** - 데이터 양/환경 부적합
-4. **모든 결과는 설명 가능해야** - "왜?"에 답할 수 있어야 함
-
----
-
-## 📁 예상 산출물
-
-1. `ugv_mon/analysis/correlation_analyzer.py` - 상관관계 분석
-2. `ugv_mon/analysis/anomaly_detector.py` - 이상 탐지 강화 (기존 확장)
-3. `ugv_mon/analysis/emergency_analyzer.py` - 비상정지 패턴 분석
-4. `ugv_mon/layouts/analysis_panel.py` - 분석 결과 시각화 패널
-5. `docs/14_ANALYSIS_RESULTS.md` - 분석 결과 문서
-
----
-
-*최종 목표: 실질적으로 운용에 도움되는 분석 결과 도출*
+*핵심: AI를 쓰는 게 목표가 아니라, 문제를 잘 해결하는 게 목표*
