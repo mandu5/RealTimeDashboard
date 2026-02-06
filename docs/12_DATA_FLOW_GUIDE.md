@@ -121,7 +121,6 @@ DashboardData = {
     "availability": 99.8,
     "jitterCurrent": 1.2,
     "jitterP95": 2.5,
-    "jitterP99": 3.8,
     ...
     
     # 운용 상태 (4키)
@@ -144,7 +143,7 @@ DashboardData = {
 |------|------|------|------|
 | `sniffer.py` | UDP 캡처 | 네트워크 | `Tuple[datetime, bytes]` |
 | `queue.py` | 버퍼 저장 | Tuple | `deque` |
-| `packet_processor.py` | 처리 파이프라인 | Tuple | `ProcessedResult` |
+| `packet_processor.py` | 처리 파이프라인 | Tuple | `BatchProcessResult` |
 | `icd_parser.py` | 바이트 파싱 | bytes | `ParseResult` |
 | `packet_store.py` | 통합 저장 | PacketRecord | 통계/UI Dict |
 | `live_provider.py` | 캡처 제어 + Dict 생성 | PacketStore | `DashboardData` |
@@ -258,7 +257,7 @@ ugv_mon/
 
 ### Q: "왜 단일 저장소로 변경했나요?"
 
-> 기존에는 stats_calculator와 live_provider에 같은 데이터가 중복 저장되어 있었습니다. PacketStore로 통합하여 단일 소스를 유지하고, 필요한 형태로 변환해서 제공합니다. 변환 오버헤드(0.5ms)는 2초 갱신 주기에 비해 무시할 수 있습니다.
+> PacketStore가 유일한 데이터 소스입니다. 단일 deque에 모든 PacketRecord를 저장하고, get_stats_dict(), get_logs(), get_chart_data() 등으로 용도에 맞게 변환하여 제공합니다. 변환 오버헤드(0.5ms)는 2초 갱신 주기에 비해 무시할 수 있습니다.
 
 ### Q: "PacketProcessor의 역할은?"
 

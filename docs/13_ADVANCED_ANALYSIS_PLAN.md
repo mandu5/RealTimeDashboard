@@ -497,6 +497,261 @@ A: "세 가지를 중점적으로 고려했습니다.
 
 ---
 
+## 📈 Plotly 인터랙티브 시각화 통합
+
+> ML 결과를 단순 텍스트가 아닌, Plotly의 인터랙티브 차트로 표현하여
+> 직관적인 이해와 탐색을 가능하게 합니다.
+
+### 1. 3D Anomaly Scatter Plot
+
+**목적**: (지터, PPS, 손실률) 3축 공간에서 정상/이상 패턴을 시각적으로 분리
+
+```python
+import plotly.graph_objects as go
+
+def create_anomaly_3d_scatter(records: List[Dict], anomaly_scores: List[float]) -> go.Figure:
+    """3D 이상 탐지 산점도.
+
+    정상 데이터는 파란색, 이상 데이터는 빨간색으로 표시.
+    마커 크기는 이상 점수에 비례합니다.
+    """
+    fig = go.Figure(data=[go.Scatter3d(
+        x=[r["jitter_current"] for r in records],
+        y=[r["pps"] for r in records],
+        z=[r["loss_rate"] for r in records],
+        mode="markers",
+        marker=dict(
+            size=[max(3, abs(s) * 10) for s in anomaly_scores],
+            color=anomaly_scores,
+            colorscale="RdBu",
+            colorbar=dict(title="Anomaly Score"),
+            opacity=0.8,
+        ),
+        text=[f"시간: {r['timestamp']}" for r in records],
+        hovertemplate=(
+            "지터: %{x:.2f}ms<br>"
+            "PPS: %{y}<br>"
+            "손실률: %{z:.2f}%<br>"
+            "%{text}<extra></extra>"
+        ),
+    )])
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title="지터 (ms)",
+            yaxis_title="PPS",
+            zaxis_title="손실률 (%)",
+        ),
+        title="3D Anomaly Detection View",
+        height=500,
+    )
+    return fig
+```
+
+**면접 어필 포인트**:
+```
+"3D 시각화를 통해 단일 변수 임계값으로는 발견할 수 없는
+다변량 이상 패턴을 직관적으로 보여줄 수 있습니다.
+예: 지터 3ms + PPS 70 + 손실 1%는 각각 정상이지만,
+3D 공간에서 보면 정상 군집에서 벗어난 것이 명확합니다."
+```
+
+### 2. 시간대별 Anomaly Heatmap
+
+**목적**: 시간대 x 메시지코드별 이상 점수 분포를 히트맵으로 표현
+
+```python
+import plotly.express as px
+import pandas as pd
+
+def create_anomaly_heatmap(
+    anomaly_log: List[Dict],
+    time_bin_minutes: int = 5,
+) -> go.Figure:
+    """시간대 x msg_code 이상 점수 히트맵.
+
+    각 셀의 색상 강도가 해당 구간의 평균 이상 점수를 나타냅니다.
+    """
+    df = pd.DataFrame(anomaly_log)
+    df["time_bin"] = pd.to_datetime(df["timestamp"]).dt.floor(f"{time_bin_minutes}min")
+    pivot = df.pivot_table(
+        values="anomaly_score",
+        index="msg_code",
+        columns="time_bin",
+        aggfunc="mean",
+    )
+
+    fig = px.imshow(
+        pivot,
+        labels=dict(x="시간대", y="메시지코드", color="이상 점수"),
+        color_continuous_scale="YlOrRd",
+        aspect="auto",
+    )
+    fig.update_layout(title="시간대별 이상 점수 Heatmap", height=350)
+    return fig
+```
+
+**활용 시나리오**:
+```
+- 특정 시간대에 특정 msg_code에서만 이상이 집중되는 패턴 발견
+- 야간/주간 패턴 차이 분석
+- 장비 교체/점검 전후 비교
+```
+
+### 3. Feature Importance Bar Chart (실시간)
+
+**목적**: 이상 탐지 시 어떤 특성이 가장 많이 기여했는지 실시간 표시
+
+```python
+def create_feature_contribution_chart(
+    contributing_features: List[Dict],
+) -> go.Figure:
+    """기여 특성 상위 5개 수평 바 차트.
+
+    Z-score 기반으로 각 특성이 이상에 얼마나 기여했는지 보여줍니다.
+    """
+    names = [f["name"] for f in contributing_features[:5]]
+    z_scores = [abs(f["z_score"]) for f in contributing_features[:5]]
+    colors = ["#ef4444" if z > 3 else "#f59e0b" if z > 2 else "#3b82f6" for z in z_scores]
+
+    fig = go.Figure(go.Bar(
+        x=z_scores,
+        y=names,
+        orientation="h",
+        marker_color=colors,
+        text=[f"z={z:.1f}" for z in z_scores],
+        textposition="outside",
+    ))
+
+    fig.update_layout(
+        title="이상 기여 특성 (Z-Score)",
+        xaxis_title="Z-Score (절대값)",
+        yaxis=dict(autorange="reversed"),
+        height=250,
+    )
+    return fig
+```
+
+### 4. Anomaly Timeline (시계열 이상 점수)
+
+**목적**: 시간 축에 따른 이상 점수 추이와 임계값을 함께 표시
+
+```python
+def create_anomaly_timeline(
+    scores: List[Dict],
+    threshold: float = -0.3,
+) -> go.Figure:
+    """이상 점수 시계열 + 임계값 라인 + 이상 구간 하이라이트.
+
+    Args:
+        scores: [{"timestamp": str, "score": float}, ...]
+        threshold: 이상 판정 임계값
+    """
+    timestamps = [s["timestamp"] for s in scores]
+    values = [s["score"] for s in scores]
+
+    fig = go.Figure()
+
+    # 이상 점수 라인
+    fig.add_trace(go.Scatter(
+        x=timestamps, y=values,
+        mode="lines",
+        name="Anomaly Score",
+        line=dict(color="#6366f1", width=2),
+        fill="tozeroy",
+        fillcolor="rgba(99, 102, 241, 0.1)",
+    ))
+
+    # 임계값 라인
+    fig.add_hline(
+        y=threshold,
+        line_dash="dash",
+        line_color="#ef4444",
+        annotation_text=f"Threshold ({threshold})",
+    )
+
+    # 이상 구간 하이라이트
+    anomaly_regions = _find_anomaly_regions(timestamps, values, threshold)
+    for start, end in anomaly_regions:
+        fig.add_vrect(
+            x0=start, x1=end,
+            fillcolor="rgba(239, 68, 68, 0.15)",
+            line_width=0,
+        )
+
+    fig.update_layout(
+        title="Anomaly Score Timeline",
+        xaxis_title="시간",
+        yaxis_title="이상 점수",
+        height=300,
+    )
+    return fig
+
+
+def _find_anomaly_regions(
+    timestamps: List[str], scores: List[float], threshold: float,
+) -> List[tuple]:
+    """연속된 이상 구간을 찾아 (start, end) 튜플 리스트로 반환."""
+    regions = []
+    in_anomaly = False
+    start = None
+    for ts, score in zip(timestamps, scores):
+        if score < threshold and not in_anomaly:
+            start = ts
+            in_anomaly = True
+        elif score >= threshold and in_anomaly:
+            regions.append((start, ts))
+            in_anomaly = False
+    if in_anomaly and start:
+        regions.append((start, timestamps[-1]))
+    return regions
+```
+
+### 5. 대시보드 통합 레이아웃
+
+```python
+def create_ml_analysis_section(ml_data: Dict) -> html.Div:
+    """ML 분석 결과 섹션 (대시보드 하단).
+
+    4개 차트를 2x2 그리드로 배치합니다.
+    """
+    return html.Div([
+        panel_header("ML 이상 탐지 분석"),
+        html.Div([
+            # 상단: 3D 산점도 + 타임라인
+            html.Div([
+                dcc.Graph(figure=create_anomaly_3d_scatter(...)),
+                dcc.Graph(figure=create_anomaly_timeline(...)),
+            ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "16px"}),
+
+            # 하단: 히트맵 + 기여 특성
+            html.Div([
+                dcc.Graph(figure=create_anomaly_heatmap(...)),
+                dcc.Graph(figure=create_feature_contribution_chart(...)),
+            ], style={"display": "grid", "gridTemplateColumns": "2fr 1fr", "gap": "16px"}),
+        ]),
+    ])
+```
+
+### 시각화 면접 대비
+
+```
+Q: "왜 Plotly를 선택했나요?"
+
+A: "세 가지 이유입니다.
+
+1. 인터랙티브: 3D 회전, 호버 툴팁, 줌으로 패턴을 탐색할 수 있어
+   정적 matplotlib보다 분석에 훨씬 유리합니다.
+
+2. Dash 네이티브: 기존 Dash 대시보드에 dcc.Graph로 자연스럽게 통합되며,
+   별도 프론트엔드 없이 콜백으로 실시간 업데이트가 가능합니다.
+
+3. WebGL 렌더링: 10만 포인트 이상도 브라우저에서 부드럽게 렌더링되어
+   1시간 데이터(36만 레코드)도 3D로 표현 가능합니다."
+```
+
+---
+
 ## 📋 구현 일정
 
 | 일 | 작업 | 산출물 |

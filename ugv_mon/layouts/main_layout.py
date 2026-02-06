@@ -42,6 +42,12 @@ def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantinePro
         children=[
             # 데이터 저장소
             dcc.Store(id="dashboard-data", data=initial_data),
+            # is-paused: 클라이언트(브라우저) 탭별 독립 UI 상태.
+            # - dcc.Store는 브라우저 세션 메모리(JS 변수)이며 DB가 아님.
+            # - 서버 config/constants에 넣으면 모든 클라이언트가 상태를 공유하게 되어 부적합.
+            # - 각 브라우저 탭마다 독립적인 일시정지 상태가 필요하므로 dcc.Store가 정답.
+            # - 새로고침 시 초기값(False)으로 자동 리셋됨.
+            # - Dash 공식 패턴: 콜백 간 클라이언트 상태 공유에 dcc.Store 사용 권장.
             dcc.Store(id="is-paused", data=False),
             dcc.Store(id="chart-time-range", data=60),
             

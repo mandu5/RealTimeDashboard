@@ -24,13 +24,12 @@ Note:
 
 import logging
 import os
-import subprocess
-import platform
 from datetime import datetime
 from threading import Lock
 from typing import Dict, List, Optional
 
-from ..core import config, DEVICE_NAMES, EmergencyStatus
+from ..core import config, DEVICE_NAMES
+from ..core.models import EMERGENCY_SOURCE_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ class LiveDataProvider:
         - DashboardData 생성
     
     데이터 흐름:
-        PacketQueue → PacketProcessor → PacketStore → _build_state() → Dict
+        PacketQueue → PacketProcessor → PacketStore → _build_dashboard_data() → Dict
     """
 
     def __init__(self, interface: str = None):
@@ -146,28 +145,6 @@ class LiveDataProvider:
                 pass
             self._sniffer = None
 
-    def switch_interface(self, new_interface: str) -> bool:
-        """인터페이스 전환."""
-        with self._lock:
-            if new_interface == self._interface:
-                return True
-            was_running = self._is_connected
-            if was_running:
-                self.stop_capture()
-            
-            # 스트림 상태 리셋 (지터 오염 방지)
-            if self._store:
-                self._store.reset_stream_state()
-            
-            old = self._interface
-            self._interface = new_interface
-            if was_running:
-                if not self.start_capture():
-                    self._interface = old
-                    self.start_capture()
-                    return False
-            return True
-
     def toggle_connection(self) -> bool:
         """연결 토글."""
         with self._lock:
@@ -218,44 +195,13 @@ class LiveDataProvider:
         """현재 캡처 방향."""
         return self._current_direction
 
-    def get_available_interfaces(self) -> List[str]:
-        """사용 가능한 인터페이스 목록."""
-        try:
-            if platform.system() == "Linux":
-                result = subprocess.run(
-                    ["ip", "link", "show"], 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=5
-                )
-                interfaces = []
-                for line in result.stdout.split("\n"):
-                    if ": " in line and "@" not in line.split(": ")[1]:
-                        interfaces.append(line.split(": ")[1].split("@")[0])
-                return interfaces or ["lo", "eth0"]
-            elif platform.system() == "Darwin":
-                result = subprocess.run(
-                    ["networksetup", "-listallhardwareports"], 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=5
-                )
-                interfaces = ["lo0"]
-                for line in result.stdout.split("\n"):
-                    if line.startswith("Device:"):
-                        interfaces.append(line.replace("Device:", "").strip())
-                return interfaces
-            return ["lo", "eth0"]
-        except Exception:
-            return ["lo", "eno2", "eno3"]
-
     # =========================================================================
     # 데이터 생성/업데이트
     # =========================================================================
     
     def generate_initial_data(self) -> Dict:
         """초기 대시보드 데이터 생성."""
-        return self._build_state()
+        return self._build_dashboard_data()
 
     def update_data(self, prev_data: Dict) -> Dict:
         """데이터 업데이트."""
@@ -274,19 +220,19 @@ class LiveDataProvider:
                     self._last_packet_time = datetime.now()
             
             # 타임아웃 체크
-            self._check_timeout()
+            self._check_connection_timeout()
             
             # 가용성 상태 기록
-            self._record_availability_change(self._is_connected)
+            self._record_uptime_segment(self._is_connected)
             
             # 연결 상태 기록
             if self._store:
                 self._store.record_connection_change(self._is_connected)
             
-            return self._build_state()
+            return self._build_dashboard_data()
 
-    def _check_timeout(self):
-        """타임아웃 체크."""
+    def _check_connection_timeout(self):
+        """연결 타임아웃 체크 (down_threshold_sec 초과 시 연결 해제)."""
         if self._last_packet_time:
             elapsed = (datetime.now() - self._last_packet_time).total_seconds()
             if elapsed >= config.ui.down_threshold_sec:
@@ -296,8 +242,8 @@ class LiveDataProvider:
     # 가용성 세그먼트 (회사 방식)
     # =========================================================================
     
-    def _record_availability_change(self, new_is_up: bool) -> None:
-        """연결 상태 변화 시 가용성 세그먼트 기록."""
+    def _record_uptime_segment(self, new_is_up: bool) -> None:
+        """연결 상태 변화 시 가용성(uptime) 세그먼트 기록."""
         now = datetime.now()
 
         if self._last_avail_change_time is None:
@@ -319,10 +265,10 @@ class LiveDataProvider:
 
         self._last_avail_change_time = now
         self._last_avail_state = new_is_up
-        self._trim_availability_segments(max_sec=3600)
+        self._prune_old_uptime_segments(max_sec=3600)
 
-    def _trim_availability_segments(self, max_sec: int = 3600) -> None:
-        """오래된 세그먼트 제거."""
+    def _prune_old_uptime_segments(self, max_sec: int = 3600) -> None:
+        """보관 기간(max_sec) 초과 세그먼트 제거."""
         now = datetime.now()
         cutoff = (now - self._start_time).total_seconds() - max_sec
         self._availability_segments = [
@@ -370,17 +316,20 @@ class LiveDataProvider:
     # 상태 빌드 (DashboardData 생성)
     # =========================================================================
 
-    def _build_state(self) -> Dict:
-        """전체 대시보드 상태 빌드 (25키)."""
+    def _build_dashboard_data(self) -> Dict:
+        """전체 대시보드 데이터 빌드 (25키).
+
+        4개 하위 빌더의 결과를 병합하여 DashboardData 딕셔너리를 구성합니다.
+        """
         return {
-            **self._build_connection_state(),
-            **self._build_stats_state(),
-            **self._build_operational_state(),
-            **self._build_ui_state(),
+            **self._build_connection_info(),
+            **self._build_kpi_metrics(),
+            **self._build_operational_info(),
+            **self._build_ui_display_data(),
         }
 
-    def _build_connection_state(self) -> Dict:
-        """연결 상태 (5키)."""
+    def _build_connection_info(self) -> Dict:
+        """연결 정보 (5키): 연결여부, 인터페이스, 방향, 필터, 마지막 패킷 시각."""
         return {
             "connected": self._is_connected,
             "interface": self._interface,
@@ -389,8 +338,8 @@ class LiveDataProvider:
             "lastPacketTime": self._last_packet_time.strftime("%H:%M:%S") if self._last_packet_time else "",
         }
 
-    def _build_stats_state(self) -> Dict:
-        """통계 상태 (9키)."""
+    def _build_kpi_metrics(self) -> Dict:
+        """KPI 지표 (8키): PPS, 파싱률, 체크섬, 손실, 가용성, 지터."""
         if self._store:
             stats = self._store.get_stats_dict()
             hourly_avail = self._store.get_hourly_availability()
@@ -407,11 +356,10 @@ class LiveDataProvider:
             "availabilityHourly": hourly_avail,
             "jitterCurrent": stats.get("jitter_current", 0.0),
             "jitterP95": stats.get("jitter_p95", 0.0),
-            "jitterP99": stats.get("jitter_p99", 0.0),
         }
 
-    def _build_operational_state(self) -> Dict:
-        """운용 상태 (4키)."""
+    def _build_operational_info(self) -> Dict:
+        """운용 정보 (4키): 운용모드, 권한, 주행상태, 비상정지."""
         if self._last_payload:
             p = self._last_payload
             return {
@@ -424,11 +372,11 @@ class LiveDataProvider:
             "operationalMode": "--- (대기 중)",
             "operationalAuthority": "--- (대기 중)",
             "drivingState": "--- (대기 중)",
-            "emergencyStatus": EmergencyStatus().to_dict(),
+            "emergencyStatus": {name: False for name in EMERGENCY_SOURCE_NAMES} | {"처리완료": False},
         }
 
-    def _build_ui_state(self) -> Dict:
-        """UI 상태 (7키)."""
+    def _build_ui_display_data(self) -> Dict:
+        """UI 렌더링용 데이터 (7키): 차트, 장치, 가용성, 이력."""
         # 장치 상태
         if self._last_payload:
             devices = [

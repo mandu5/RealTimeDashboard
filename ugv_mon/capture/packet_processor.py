@@ -24,13 +24,17 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class ProcessedResult:
-    """처리 결과 요약.
-    
+class BatchProcessResult:
+    """배치 처리 결과 요약.
+
+    process_pending()의 반환값으로, 한 번의 폴링에서 처리된
+    패킷들의 집계 결과를 담습니다.
+
     Attributes:
         count: 처리된 패킷 수
         success_count: 파싱 성공 수
-        last_payload: 마지막 페이로드 (있으면)
+        checksum_fail_count: 체크섬 실패 수
+        last_payload: 마지막 OperationalPayload (있으면)
     """
     count: int
     success_count: int
@@ -60,7 +64,7 @@ class PacketProcessor:
         self._parser = parser
         self._store = store
     
-    def process_pending(self) -> ProcessedResult:
+    def process_pending(self) -> BatchProcessResult:
         """대기 중인 모든 패킷 처리.
         
         Returns:
@@ -83,7 +87,7 @@ class PacketProcessor:
                 if result.last_payload:
                     last_payload = result.last_payload
         
-        return ProcessedResult(
+        return BatchProcessResult(
             count=count,
             success_count=success_count,
             checksum_fail_count=checksum_fail_count,
@@ -94,7 +98,7 @@ class PacketProcessor:
         self, 
         capture_time: datetime, 
         packet_bytes: bytes
-    ) -> Optional["_SingleResult"]:
+    ) -> Optional["_PacketProcessResult"]:
         """단일 패킷 처리.
         
         Args:
@@ -150,7 +154,7 @@ class PacketProcessor:
         
         self._store.add(record)
         
-        return _SingleResult(
+        return _PacketProcessResult(
             parse_ok=parse_result.success,
             checksum_ok=parse_result.checksum_ok,
             last_payload=payload,
@@ -158,8 +162,8 @@ class PacketProcessor:
 
 
 @dataclass
-class _SingleResult:
-    """단일 패킷 처리 결과 (내부용)."""
+class _PacketProcessResult:
+    """단일 패킷 처리 결과 (모듈 내부용)."""
     parse_ok: bool
     checksum_ok: bool
     last_payload: Optional[object]

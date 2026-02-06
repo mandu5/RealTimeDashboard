@@ -215,7 +215,6 @@ def get_chart_colors() -> dict:
         "primary": "#3b82f6",
         "secondary": "#10b981",
         "p95_line": "#f59e0b",
-        "p99_line": "#ef4444",
         "fill_primary": "rgba(59, 130, 246, 0.1)",
         "fill_secondary": "rgba(16, 185, 129, 0.1)",
         "up_segment": "#10b981",

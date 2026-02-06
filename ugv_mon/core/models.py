@@ -350,33 +350,13 @@ class AvailabilitySegment:
         }
 
 
-@dataclass
-class EmergencyStatus:
-    """비상정지 상태 (UI 표시용).
-    
-    10가지 비상정지 원인 각각의 활성화 상태를 저장합니다.
-    """
-    communication_lost: bool = False
-    equipment_fail_driving: bool = False
-    equipment_fail_power: bool = False
-    signal_lost_driving: bool = False
-    signal_lost_autonomous: bool = False
-    signal_lost_navigation: bool = False
-    signal_lost_power: bool = False
-    signal_lost_comm: bool = False
-    manual_stop_ocs: bool = False
-    manual_stop_near: bool = False
+def build_default_emergency_dict() -> Dict[str, bool]:
+    """기본(모두 비활성) 비상정지 딕셔너리 생성.
 
-    def to_dict(self) -> Dict[str, bool]:
-        return {
-            "통신 두절": self.communication_lost,
-            "장비고장(주행)": self.equipment_fail_driving,
-            "장비고장(동력계)": self.equipment_fail_power,
-            "신호단절(주행)": self.signal_lost_driving,
-            "신호단절(자율)": self.signal_lost_autonomous,
-            "신호단절(항법)": self.signal_lost_navigation,
-            "신호단절(동력계)": self.signal_lost_power,
-            "신호단절(통신)": self.signal_lost_comm,
-            "수동정지(운용통제장치)": self.manual_stop_ocs,
-            "수동정지(근거리조종기)": self.manual_stop_near,
-        }
+    EmergencyStatus 클래스를 대체합니다.
+    OperationalPayload.get_emergency_dict()와 동일한 키 구조를 사용합니다.
+
+    Returns:
+        EMERGENCY_SOURCE_NAMES 기반 {원인명: False} + {"처리완료": False}
+    """
+    return {name: False for name in EMERGENCY_SOURCE_NAMES} | {"처리완료": False}

@@ -13,7 +13,7 @@
 4. [체크섬 실패율](#4-체크섬-실패율-checksum-fail-)
 5. [패킷 손실](#5-패킷-손실-packet-loss)
 6. [가용성](#6-가용성-availability-)
-7. [지터](#7-지터-jitter-p95p99)
+7. [지터](#7-지터-jitter-p95)
 8. [수정 전/후 비교](#8-수정-전후-비교)
 
 ---
@@ -426,7 +426,7 @@ self._records: deque[PacketRecord]  # 패킷 기록 (timestamp 포함)
 
 ---
 
-## 7. 지터 (Jitter P95/P99)
+## 7. 지터 (Jitter P95)
 
 ### 📖 의미
 **패킷 도착 간격의 변동 정도** - 네트워크 안정성 지표
@@ -463,12 +463,11 @@ self._records: deque[PacketRecord]  # 패킷 기록 (timestamp 포함)
 
 ---
 
-### 🎯 P95, P99란?
+### P95란?
 
 | 지표 | 의미 |
 |------|------|
 | **P95** | 95%의 지터가 이 값 이하 (상위 5% 제외) |
-| **P99** | 99%의 지터가 이 값 이하 (상위 1% 제외) |
 
 **예시:**
 ```
@@ -477,7 +476,6 @@ self._records: deque[PacketRecord]  # 패킷 기록 (timestamp 포함)
                                           이상치(상위 1%)
 
 P95 = 3ms  (대부분의 지터는 3ms 이하)
-P99 = 50ms (극단적 케이스 포함)
 ```
 
 ---
@@ -526,7 +524,7 @@ def record_packet(self, timestamp: datetime, sequence: int, size: int, msg_code:
 
 ---
 
-### 🧮 P95, P99 계산 방법
+### P95 계산 방법
 
 ```python
 # stats_calculator.py
@@ -545,10 +543,7 @@ def get_jitter_percentiles(self) -> Tuple[float, float]:
         # P95 = 95% 위치의 값
         p95 = sorted_jitters[min(int(n * 0.95), n - 1)]
         
-        # P99 = 99% 위치의 값
-        p99 = sorted_jitters[min(int(n * 0.99), n - 1)]
-        
-        return (round(p95, 2), round(p99, 2))
+        return round(p95, 2)
 ```
 
 ---
@@ -564,7 +559,7 @@ self._last_by_code: Dict[int, Dict]  # msg_code별 마지막 timestamp/interval
 ---
 
 ### 📊 현재 결과
-- **P95/P99 ≈ 0ms** (네트워크가 매우 안정적)
+- **P95 ~ 0ms** (네트워크가 매우 안정적)
 
 ---
 
@@ -587,7 +582,7 @@ self._last_by_code: Dict[int, Dict]  # msg_code별 마지막 timestamp/interval
 | `sniffer.py` | `capture_time = datetime.now()` 추가 |
 | `queue.py` | 튜플 `(datetime, bytes)` 처리 |
 | `live_provider.py` | `capture_time` 사용, msg_code 전달 |
-| `stats_calculator.py` | 지터 간격 변동 기반, 가용성 연결 상태 기반, msg_code별 분리 |
+| `packet_store.py` | 지터 간격 변동 기반, 가용성 연결 상태 기반, msg_code별 분리 |
 
 ---
 

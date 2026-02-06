@@ -50,7 +50,13 @@ class CaptureStats:
         else:
             self._pps_window_count += 1
 
-    def get_pps(self) -> int:
+    def get_capture_pps(self) -> int:
+        """스니퍼 레벨 PPS (캡처 단계에서의 초당 패킷 수).
+
+        Note:
+            프로덕션 대시보드 PPS는 PacketStore.get_pps()를 사용합니다.
+            이 메서드는 캡처 스니퍼 내부 디버깅/모니터링 전용입니다.
+        """
         return self._current_pps
 
     def get_filter_pass_pct(self) -> float:
@@ -74,7 +80,7 @@ class CaptureStats:
             "packets_total": self.packets_total,
             "packets_filtered": self.packets_filtered,
             "bytes_total": self.bytes_total,
-            "pps": self.get_pps(),
+            "pps": self.get_capture_pps(),
             "filter_pass_pct": round(self.get_filter_pass_pct(), 1),
             "last_packet_time": self.last_packet_time.strftime("%H:%M:%S") if self.last_packet_time else "",
         }

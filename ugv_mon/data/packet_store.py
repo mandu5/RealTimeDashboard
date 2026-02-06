@@ -99,11 +99,11 @@ class PacketStore:
         self._records: deque[PacketRecord] = deque(maxlen=max_records)
         self._lock = threading.Lock()
         
-        # 지터 계산용 상태 (msg_code별)
-        self._last_by_code: Dict[int, Dict] = {}
+        # 지터 계산용 이전 패킷 상태 (msg_code별)
+        self._prev_packet_by_msgcode: Dict[int, Dict] = {}
         
-        # 패킷 손실 계산용
-        self._loss_by_code: Dict[int, int] = {}
+        # 패킷 손실 누적 (msg_code별)
+        self._packet_loss_by_msgcode: Dict[int, int] = {}
         
         # 차트 데이터 캐시 (2초마다 갱신)
         self._chart_cache: List[Dict] = []
@@ -167,55 +167,55 @@ class PacketStore:
         timestamp: datetime, 
         msg_code: int
     ) -> Tuple[Optional[float], Optional[float]]:
-        """지터 계산."""
-        if msg_code not in self._last_by_code:
-            self._last_by_code[msg_code] = {
-                "timestamp": None, 
-                "interval": None, 
-                "sequence": None
+        """지터 계산 (RFC 3550 기반 인접 간격 차이)."""
+        if msg_code not in self._prev_packet_by_msgcode:
+            self._prev_packet_by_msgcode[msg_code] = {
+                "timestamp": None,
+                "interval": None,
+                "sequence": None,
             }
-        
-        code_data = self._last_by_code[msg_code]
-        prev_ts = code_data.get("timestamp")
-        
+
+        prev_msg_state = self._prev_packet_by_msgcode[msg_code]
+        prev_ts = prev_msg_state.get("timestamp")
+
         if prev_ts is None:
-            code_data["timestamp"] = timestamp
-            code_data["interval"] = None
+            prev_msg_state["timestamp"] = timestamp
+            prev_msg_state["interval"] = None
             return None, None
-        
+
         interval_ms = (timestamp - prev_ts).total_seconds() * 1000
-        code_data["timestamp"] = timestamp
-        
-        # 큰 갭 스킵
+        prev_msg_state["timestamp"] = timestamp
+
+        # 큰 갭 스킵 (스트림 재시작으로 간주)
         if interval_ms > MAX_GAP_MS:
-            code_data["interval"] = None
+            prev_msg_state["interval"] = None
             return None, interval_ms
-        
-        prev_interval = code_data.get("interval")
+
+        prev_interval = prev_msg_state.get("interval")
         jitter_ms = None
-        
+
         if isinstance(prev_interval, (int, float)) and prev_interval <= MAX_GAP_MS:
             diff = abs(interval_ms - prev_interval)
             if diff <= 5:  # JITTER_THRESHOLD_MS
                 jitter_ms = diff
-        
-        code_data["interval"] = interval_ms
+
+        prev_msg_state["interval"] = interval_ms
         return jitter_ms, interval_ms
     
     def _calculate_packet_loss(self, msg_code: int, sequence: int) -> None:
-        """패킷 손실 계산."""
-        if msg_code not in self._last_by_code:
+        """패킷 손실 계산 (시퀀스 갭 분석, 4-bit 순환)."""
+        if msg_code not in self._prev_packet_by_msgcode:
             return
-        
-        code_data = self._last_by_code[msg_code]
-        prev_seq = code_data.get("sequence")
-        code_data["sequence"] = sequence
-        
+
+        prev_msg_state = self._prev_packet_by_msgcode[msg_code]
+        prev_seq = prev_msg_state.get("sequence")
+        prev_msg_state["sequence"] = sequence
+
         if prev_seq is not None:
             gap = ((sequence & 0x0F) - (prev_seq & 0x0F)) % 16
             if gap > 1:
-                self._loss_by_code[msg_code] = (
-                    self._loss_by_code.get(msg_code, 0) + (gap - 1)
+                self._packet_loss_by_msgcode[msg_code] = (
+                    self._packet_loss_by_msgcode.get(msg_code, 0) + (gap - 1)
                 )
     
     def _prune_old_records(self, current_time: datetime) -> None:
@@ -244,25 +244,23 @@ class PacketStore:
                     return round(r.jitter_ms, 2)
             return 0.0
     
-    def get_jitter_percentiles(self) -> Tuple[float, float]:
-        """지터 P95, P99 반환."""
+    def get_jitter_p95(self) -> float:
+        """지터 P95 반환."""
         with self._lock:
             jitters = [
                 r.jitter_ms for r in self._records
                 if r.jitter_ms is not None and r.jitter_ms <= MAX_JITTER_MS
             ]
             if not jitters:
-                return (0.0, 0.0)
+                return 0.0
             sorted_j = sorted(jitters)
             n = len(sorted_j)
-            p95 = sorted_j[min(int(n * 0.95), n - 1)]
-            p99 = sorted_j[min(int(n * 0.99), n - 1)]
-            return (round(p95, 2), round(p99, 2))
+            return round(sorted_j[min(int(n * 0.95), n - 1)], 2)
     
     def get_packet_loss(self) -> int:
         """총 패킷 손실 수."""
         with self._lock:
-            return sum(self._loss_by_code.values())
+            return sum(self._packet_loss_by_msgcode.values())
     
     def get_availability(self, window_sec: int = 300) -> float:
         """가용성 계산 (%)."""
@@ -282,12 +280,10 @@ class PacketStore:
     
     def get_stats_dict(self) -> Dict:
         """전체 통계 딕셔너리."""
-        p95, p99 = self.get_jitter_percentiles()
         return {
             "pps": self.get_pps(),
             "jitter_current": self.get_current_jitter(),
-            "jitter_p95": p95,
-            "jitter_p99": p99,
+            "jitter_p95": self.get_jitter_p95(),
             "packet_loss": self.get_packet_loss(),
             "availability": self.get_availability(),
         }
@@ -309,7 +305,7 @@ class PacketStore:
                 sizes = [r.size for r in filtered]
                 return {
                     "pps": sum(1 for r in filtered if r.timestamp >= one_sec_ago),
-                    "packet_loss": self._loss_by_code.get(msg_code, 0),
+                    "packet_loss": self._packet_loss_by_msgcode.get(msg_code, 0),
                     "avg_size": round(sum(sizes) / len(sizes), 1) if sizes else 0,
                     "count": len(filtered),
                 }
@@ -444,8 +440,8 @@ class PacketStore:
         """전체 상태 초기화."""
         with self._lock:
             self._records.clear()
-            self._last_by_code.clear()
-            self._loss_by_code.clear()
+            self._prev_packet_by_msgcode.clear()
+            self._packet_loss_by_msgcode.clear()
             self._chart_cache.clear()
             self._chart_cache_time = None
             self._connection_history.clear()
@@ -453,13 +449,13 @@ class PacketStore:
             self._mode_transitions.clear()
             self._last_op_mode = None
             self._emergency_counts.clear()
-    
+
     def reset_stream_state(self) -> None:
-        """스트림 상태만 리셋 (인터페이스 전환 시)."""
+        """스트림 상태만 리셋 (방향 전환 시 지터 오염 방지)."""
         with self._lock:
             logger.info("[STORE] reset_stream_state")
-            self._last_by_code.clear()
-            self._loss_by_code.clear()
+            self._prev_packet_by_msgcode.clear()
+            self._packet_loss_by_msgcode.clear()
     
     @property
     def record_count(self) -> int:
