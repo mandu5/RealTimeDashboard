@@ -1,68 +1,82 @@
 # UGV-MON 데이터 흐름 (쉬운 설명)
 
 > 네트워크 패킷이 화면에 표시되기까지의 여정
+> **최종 업데이트**: 2026-02-04
 
 ---
 
 ## 🎯 한 줄 요약
 
 ```
-이더넷 → bytes → deque → ParseResult → PacketRecord → DashboardData → UI
+UDP → Tuple → PacketProcessor → PacketStore(deque 1개) → Dict(25키) → UI
 ```
 
 ---
 
-## 📊 개선된 데이터 타입
+## 📊 아키텍처 개선 (2026-02-04)
 
-### Before (복잡)
+### Before (복잡, 중복 저장)
 ```
-bytes → Dict → DataFrame(미사용) → Dict(26키, 중복) → UI
+live_provider.py에서 6가지 책임:
+- queue 접근, 언패킹, 파싱, 통계, deque 저장(5개), Dict 생성
+
+저장소: stats_calculator(List) + live_provider(deque 5개) = 중복!
 ```
 
-### After (단순)
+### After (단순, 단일 저장)
 ```
-bytes → ParseResult(dataclass) → PacketRecord(NamedTuple) → DashboardData(25키) → UI
+책임 분리:
+- packet_processor.py: 패킷 처리 파이프라인
+- packet_store.py: 통합 저장소 (deque 1개)
+- live_provider.py: 캡처 제어 + Dict 생성
+
+저장소: PacketStore(deque 1개) = 단일 소스!
 ```
 
 ---
 
 ## 🗃️ 핵심 자료구조
 
-### 1. deque (collections.deque)
-**용도**: 실시간 데이터 버퍼 (FIFO, 크기 제한)
-
-| 위치 | 용도 | maxlen |
-|------|------|--------|
-| `queue.py` | 패킷 임시 저장 | 1000 |
-| `live_provider.py` | 로그 저장 | 1000 |
-| `live_provider.py` | 차트 데이터 | 180 |
-| `live_provider.py` | 연결 이력 | 100 |
-| `live_provider.py` | 모드 전이 이력 | 50 |
-
-### 2. PacketRecord (NamedTuple)
-**용도**: 통계 계산용 패킷 기록
+### 1. PacketRecord (dataclass)
+**위치**: `data/packet_store.py`
 
 ```python
-# stats_calculator.py
-class PacketRecord(NamedTuple):
-    timestamp: datetime
-    msg_code: int
-    sequence: int
-    size: int
+@dataclass
+class PacketRecord:
+    timestamp: datetime       # 캡처 시각
+    msg_code: int            # ICD 메시지 코드
+    sequence: int            # 시퀀스 번호
+    size: int                # 패킷 크기
     jitter_ms: Optional[float]
     interval_ms: Optional[float]
+    parse_ok: bool           # 파싱 성공 여부
+    checksum_ok: bool        # 체크섬 검증
+    operation_mode: str      # 운용 모드
+    authority: str           # 운용 권한
 ```
 
-**왜 NamedTuple?**
-- Dict 대비 메모리 50% 감소
-- 타입 안전성 보장
-- 불변성으로 스레드 안전
-
-### 3. DashboardData (TypedDict)
-**용도**: UI에 전달되는 최종 데이터 구조
+### 2. PacketStore (통합 저장소)
+**위치**: `data/packet_store.py`
 
 ```python
-# data/types.py
+class PacketStore:
+    _records: deque[PacketRecord]  # 단일 저장소 (최대 1시간분)
+    
+    # 통계 제공
+    def get_pps() -> int
+    def get_jitter_percentiles() -> Tuple[float, float]
+    def get_stats_dict() -> Dict
+    
+    # UI 데이터 제공
+    def get_logs(limit) -> List[Dict]
+    def get_chart_data(limit) -> List[Dict]
+    def get_connection_history() -> List[Dict]
+```
+
+### 3. DashboardData (TypedDict)
+**위치**: `data/types.py`
+
+```python
 class DashboardData(TypedDict):
     # 연결 (5개)
     connected: bool
@@ -73,9 +87,7 @@ class DashboardData(TypedDict):
     
     # 통계 (9개)
     capturePps: int
-    parseSuccess: float
-    availability: float      # 5분 가용성
-    availabilityHourly: float # 1시간 가용성
+    availability: float
     jitterCurrent: float
     jitterP95: float
     jitterP99: float
@@ -87,14 +99,14 @@ class DashboardData(TypedDict):
     ...
     
     # UI (7개)
-    combinedData: List[ChartDataPoint]
-    devices: List[DeviceStatus]
+    combinedData: List[Dict]
+    devices: List[Dict]
     ...
 ```
 
 ---
 
-## 📦 전체 흐름도 (5단계)
+## 📦 전체 흐름도 (4단계)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -103,59 +115,50 @@ class DashboardData(TypedDict):
 └──────────────────────────────┬──────────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  1. sniffer.py + queue.py                                               │
+│  1. capture/sniffer.py + queue.py                                       │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
 │     │ 입력: UDP 패킷 (이더넷 프레임)                                    │ │
-│     │ 저장: ★ deque[Tuple[datetime, bytes]] (maxlen=1000) ★           │ │
+│     │ 저장: deque[Tuple[datetime, bytes]] (maxlen=1000)               │ │
 │     │ 출력: List[Tuple[datetime, bytes]]                              │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────┬──────────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  2. icd_parser.py                                                       │
-│     바이트를 구조체로 파싱                                                │
+│  2. capture/packet_processor.py (NEW)                                   │
+│     패킷 처리 파이프라인                                                 │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ 입력: bytes (101 bytes = 12 헤더 + 87 페이로드 + 2 체크섬)        │ │
-│     │ 출력: ParseResult (dataclass)                                   │ │
-│     │   ├── header: ICDHeader                                        │ │
-│     │   └── payload: OperationalPayload                              │ │
+│     │ 입력: Tuple[datetime, bytes] from queue                        │ │
+│     │ 처리:                                                          │ │
+│     │   1. Tuple 언패킹 → capture_time, packet_bytes                 │ │
+│     │   2. icd_parser.parse(packet_bytes) → ParseResult              │ │
+│     │   3. packet_store.add(PacketRecord) → 저장                     │ │
+│     │ 출력: ProcessedResult (처리 요약)                               │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────┬──────────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  3. stats_calculator.py                                                 │
-│     통계 계산 (PPS, 지터, 가용성 등)                                      │
+│  3. data/packet_store.py (NEW) - 통합 저장소                            │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ 입력: timestamp, sequence, size, msg_code                       │ │
-│     │ 저장: ★ List[PacketRecord] (NamedTuple, 최대 1시간분) ★          │ │
-│     │ 출력: dict (pps, jitter_p95, availability 등)                   │ │
+│     │ 저장: deque[PacketRecord] (단일 저장소, 최대 1시간분)            │ │
+│     │                                                                 │ │
+│     │ 제공:                                                           │ │
+│     │   • get_stats_dict()     → 통계 (PPS, 지터, 손실률)             │ │
+│     │   • get_logs()           → 로그 UI용                           │ │
+│     │   • get_chart_data()     → 차트 UI용                           │ │
+│     │   • get_connection_history() → 이력 UI용                       │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────┬──────────────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  4. live_provider.py                                                    │
-│     모든 데이터를 DashboardData (25개 키)로 통합                          │
+│  4. data/live_provider.py + callbacks/update_callbacks.py               │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ 입력: ParseResult + StatsCalculator 결과                        │ │
-│     │ 저장: ★ deque 여러 개 (이력 데이터) ★                             │ │
-│     │ 출력: DashboardData (TypedDict, 25개 키)                        │ │
-│     │   ├── 연결: connected, interface, direction... (5개)           │ │
-│     │   ├── 통계: capturePps, jitter, availability... (9개)          │ │
-│     │   ├── 운용: operationalMode, emergencyStatus... (4개)          │ │
-│     │   └── UI: combinedData, devices, history... (7개)              │ │
-│     └─────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────┬──────────────────────────────────────────┘
-                               ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  5. update_callbacks.py → 브라우저                                       │
-│     DashboardData → UI 컴포넌트 → 화면 표시                              │
-│     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ 입력: DashboardData (Dict)                                      │ │
-│     │ 출력: HTML/DMC 컴포넌트들                                         │ │
-│     │   ├── KPI 카드 (PPS, 지터, 가용성)                               │ │
-│     │   ├── 차트 (Plotly Figure)                                      │ │
-│     │   ├── 상태 패널 (운용모드, 비상정지)                              │ │
-│     │   └── 히스토리 패널 (연결이력, 모드전이)                          │ │
+│     │ live_provider:                                                  │ │
+│     │   • 캡처 제어 (start/stop)                                      │ │
+│     │   • PacketStore에서 데이터 가져와 Dict(25키) 생성               │ │
+│     │                                                                 │ │
+│     │ callbacks:                                                      │ │
+│     │   • Dict → HTML/DMC 컴포넌트 변환                               │ │
+│     │   • 2초마다 UI 업데이트                                         │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -164,84 +167,58 @@ class DashboardData(TypedDict):
 
 ## 🔄 데이터 타입 변환 요약
 
-| 단계 | 파일 | 입력 타입 | 저장/처리 타입 | 출력 타입 |
-|------|------|----------|---------------|----------|
-| 1 | sniffer.py | UDP 패킷 | - | `Tuple[datetime, bytes]` |
-| 1 | queue.py | 튜플 | **`deque`** | `List[Tuple]` |
-| 2 | icd_parser.py | `bytes` | - | **`ParseResult`** |
-| 3 | stats_calculator.py | 숫자들 | **`List[PacketRecord]`** | `dict` |
-| 4 | live_provider.py | 여러 객체 | **`deque`** 여러개 | **`DashboardData`** |
-| 5 | callbacks.py | `Dict` | - | HTML 컴포넌트 |
+| 단계 | 파일 | 입력 타입 | 출력 타입 |
+|------|------|----------|----------|
+| 1 | sniffer.py | UDP 패킷 | `Tuple[datetime, bytes]` |
+| 1 | queue.py | Tuple | `deque` → `List[Tuple]` |
+| 2 | packet_processor.py | Tuple | `ProcessedResult` |
+| 2-내부 | icd_parser.py | bytes | `ParseResult` |
+| 3 | packet_store.py | PacketRecord | `deque` → 통계/UI Dict |
+| 4 | live_provider.py | PacketStore | `DashboardData (25키)` |
+| 4 | callbacks.py | Dict | HTML 컴포넌트 |
 
 ---
 
-## 📝 핵심 데이터 구조 예시
-
-### 1. 원본 패킷 (bytes)
+## 📂 관련 파일 위치
 
 ```
-[헤더 12B][페이로드 87B][체크섬 2B] = 총 101 bytes
+ugv_mon/
+├── capture/
+│   ├── sniffer.py           # ① UDP 캡처
+│   ├── queue.py             # ① 패킷 버퍼 (deque)
+│   ├── packet_processor.py  # ② 처리 파이프라인 (NEW)
+│   └── stats.py             # 캡처 레벨 카운터
+│
+├── parser/
+│   ├── icd_parser.py        # ② bytes → ParseResult
+│   └── models.py            # ICDHeader, OperationalPayload
+│
+├── data/
+│   ├── packet_store.py      # ③ 통합 저장소 (NEW)
+│   ├── types.py             # ③ TypedDict 정의 (NEW)
+│   ├── live_provider.py     # ④ DashboardData 생성
+│   └── mock_data.py         # 테스트용 Mock
+│
+├── analysis/
+│   └── stats_calculator.py  # (하위호환용, PacketStore가 대체)
+│
+├── callbacks/
+│   └── update_callbacks.py  # ④ Dict → UI
+│
+└── layouts/, components/    # UI 컴포넌트들
 ```
 
-### 2. ParseResult (파싱 후)
+---
 
-```python
-ParseResult(
-    success=True,
-    header=ICDHeader(timestamp=100, sequence=5, msg_code=0x01, ...),
-    payload=OperationalPayload(operation_mode="무인주행", devices={...}, ...),
-    checksum_ok=True
-)
-```
+## 🔧 주요 개선 사항
 
-### 3. PacketRecord (통계용)
-
-```python
-PacketRecord(
-    timestamp=datetime(2026, 2, 4, 14, 30, 1),
-    msg_code=0x01,
-    sequence=5,
-    size=101,
-    jitter_ms=1.2,
-    interval_ms=10.0
-)
-```
-
-### 4. DashboardData (UI용, 25개 키)
-
-```python
-{
-    # 연결 상태 (5개)
-    "connected": True,
-    "interface": "eno2",
-    "direction": "status",
-    "filter": "50000→61000",
-    "lastPacketTime": "14:30:01",
-    
-    # 통계 (9개)
-    "capturePps": 100,
-    "availability": 99.8,
-    "availabilityHourly": 99.5,
-    "jitterCurrent": 1.2,
-    "jitterP95": 2.5,
-    "jitterP99": 3.8,
-    ...
-    
-    # 운용 상태 (4개)
-    "operationalMode": "무인주행",
-    "operationalAuthority": "OCS",
-    "drivingState": "주행",
-    "emergencyStatus": {"통신이상": False, ...},
-    
-    # UI 데이터 (7개)
-    "combinedData": [{"timestamp": "14:30:01", "pps": 100, "jitter": 1.2}, ...],
-    "devices": [{"name": "모터", "connected": True}, ...],
-    "connectionHistory": [...],
-    "modeTransitions": [...],
-    "emergencyCounts": {"통신이상": 2},
-    ...
-}
-```
+| 항목 | Before | After |
+|------|--------|-------|
+| **저장소** | stats_calc(List) + live_provider(deque 5개) | PacketStore(deque 1개) |
+| **책임** | live_provider 6가지 | 3개 모듈로 분리 |
+| **중복** | 같은 데이터 2곳 저장 | 단일 소스 |
+| **패킷 레코드** | Dict | dataclass (타입 안전) |
+| **대시보드 키** | 26개 (중복) | 25개 |
 
 ---
 
@@ -255,38 +232,4 @@ PacketRecord(
 
 ---
 
-## 📂 관련 파일 위치
-
-```
-ugv_mon/
-├── capture/
-│   ├── sniffer.py      # ① 패킷 캡처
-│   └── queue.py        # ① 큐 저장 (deque)
-├── parser/
-│   ├── icd_parser.py   # ② 바이트→ParseResult
-│   └── models.py       # ② ICDHeader, OperationalPayload
-├── analysis/
-│   └── stats_calculator.py  # ③ PacketRecord, 통계 계산
-├── data/
-│   ├── live_provider.py     # ④ DashboardData 생성
-│   └── types.py             # ④ TypedDict 정의
-├── callbacks/
-│   └── update_callbacks.py  # ⑤ Dict→UI
-└── core/
-    └── models.py       # 공통 데이터 클래스 정의
-```
-
----
-
-## 🔧 개선 요약 (2026-02-04)
-
-| 항목 | Before | After |
-|------|--------|-------|
-| 패킷 레코드 | `List[Dict]` | `List[PacketRecord]` (NamedTuple) |
-| DataFrame | 있음 (미사용 dead code) | 제거됨 (ML 도입 시 별도 모듈) |
-| 대시보드 키 | 26개 (중복 있음) | 25개 (중복 제거) |
-| 타입 문서화 | 없음 | `data/types.py` (TypedDict) |
-
----
-
-*요약: 네트워크 바이트 → ParseResult → PacketRecord → DashboardData → 화면*
+*요약: UDP → Tuple → PacketProcessor → PacketStore → Dict → UI*

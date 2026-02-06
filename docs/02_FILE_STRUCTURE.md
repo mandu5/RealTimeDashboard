@@ -5,7 +5,7 @@
 ## 디렉토리 구조
 
 ```
-opus1/
+ugv_mon/
 ├── run.py                 # 통합 진입점 (CLI: --mode, --interface, --port)
 ├── requirements.txt       # 의존성 목록
 ├── test_capture_packets.py  # 통합 테스트
@@ -15,77 +15,95 @@ opus1/
 │   ├── test_icd_parser.py
 │   └── test_stats_calculator.py
 │
-├── docs/                  # 문서 (7개)
-│   ├── 00_PROJECT_OVERVIEW.md   # 프로젝트 개요
-│   ├── 01_ARCHITECTURE.md       # 아키텍처 설명
-│   ├── 02_FILE_STRUCTURE.md     # 파일 구조 (이 문서)
-│   ├── 03_ICD_SPECIFICATION.md  # ICD 명세
-│   ├── 05_KPI_DATA_ANALYSIS.md  # KPI 상세 설명
-│   ├── 07_VISUALIZATION_IDEAS.md # 데이터 분석 아이디어
-│   └── 09_MIDTERM_FEEDBACK.md   # 중간발표 피드백
+├── docs/                  # 문서
+│   ├── 00_PROJECT_OVERVIEW.md
+│   ├── 01_ARCHITECTURE.md
+│   ├── 02_FILE_STRUCTURE.md     # (이 문서)
+│   ├── 03_ICD_SPECIFICATION.md
+│   ├── 05_KPI_DATA_ANALYSIS.md
+│   ├── 12_DATA_FLOW_GUIDE.md
+│   ├── 13_ADVANCED_ANALYSIS_PLAN.md
+│   └── 14_DATA_FLOW_SIMPLE.md   # 간단한 데이터 흐름
 │
-├── logs/                  # 로그 폴더
-│   └── alerts.log         # 알림 로그 (자동 생성)
-│
-└── ugv_mon/               # 메인 Python 패키지 (34개 파일)
+└── ugv_mon/               # 메인 Python 패키지
     ├── app.py             # Dash 앱 팩토리
     ├── config.py          # 설정 관리
-    ├── constants.py       # 상수 정의 (장치 목록, ICD 크기 등)
-    ├── styles.py          # UI 스타일 상수 (색상, 폰트)
+    ├── constants.py       # 상수 정의
+    ├── styles.py          # UI 스타일 상수
     │
     ├── capture/           # 패킷 캡처 모듈
-    │   ├── sniffer.py     # PacketSniffer 클래스
-    │   ├── queue.py       # 스레드 안전 PacketQueue
-    │   └── stats.py       # CaptureStats 클래스
+    │   ├── sniffer.py           # PacketSniffer (Scapy)
+    │   ├── queue.py             # PacketQueue (thread-safe)
+    │   ├── stats.py             # CaptureStats (캡처 카운터)
+    │   └── packet_processor.py  # PacketProcessor (NEW) ★
     │
     ├── parser/            # ICD 파싱 모듈
-    │   ├── icd_parser.py  # ICDParser 클래스
-    │   └── models.py      # ICDHeader, StatusPayload, ParseResult
+    │   ├── icd_parser.py        # ICDParser
+    │   └── models.py            # ICDHeader, OperationalPayload
     │
     ├── analysis/          # 통계 분석 모듈
-    │   ├── stats_calculator.py  # 지터, PPS, 가용성 계산 (window=300초)
+    │   ├── stats_calculator.py  # StatsCalculator (하위호환)
     │   └── anomaly_detector.py  # 이상 탐지
     │
     ├── data/              # 데이터 모델 및 제공자
-    │   ├── models.py      # 타입 정의 (Enum, dataclass)
-    │   ├── mock_data.py   # MockDataGenerator
-    │   └── live_provider.py  # LiveDataProvider
+    │   ├── packet_store.py      # PacketStore (NEW) ★ 통합 저장소
+    │   ├── types.py             # TypedDict 정의 (NEW) ★
+    │   ├── live_provider.py     # LiveDataProvider
+    │   ├── mock_data.py         # MockDataGenerator
+    │   └── models.py            # 타입 정의
     │
     ├── components/        # UI 컴포넌트
-    │   ├── status_chip.py # 상태 칩
-    │   ├── kpi_card.py    # KPI 카드
-    │   ├── device_grid.py # 장치 연결 그리드
-    │   ├── log_table.py   # 로그 테이블 (필터링 기능 포함)
-    │   └── alerts.py      # 알림 매니저 (토스트)
+    │   ├── status_chip.py
+    │   ├── kpi_card.py
+    │   ├── device_grid.py
+    │   └── log_table.py
     │
     ├── layouts/           # 레이아웃
-    │   ├── main_layout.py # 전체 레이아웃
-    │   ├── header.py      # 헤더 바 (인터페이스 동적 선택)
-    │   ├── panels.py      # 상태 패널들
-    │   └── charts.py      # 차트
+    │   ├── main_layout.py
+    │   ├── header.py
+    │   ├── panels/
+    │   └── charts.py
     │
     ├── callbacks/         # Dash 콜백
-    │   └── update_callbacks.py  # 폴링 및 UI 업데이트
+    │   └── update_callbacks.py
     │
-    └── utils/             # 유틸리티
-        └── alert_logger.py  # 알림 로그 기록
+    └── core/              # 공통 모듈
+        ├── __init__.py
+        └── models.py
 ```
 
 ## 핵심 파일 역할
+
+### 새로 추가된 파일 (2026-02-04) ★
+
+| 파일 | 역할 |
+|------|------|
+| `capture/packet_processor.py` | 패킷 처리 파이프라인 (언패킹, 파싱, 저장) |
+| `data/packet_store.py` | 통합 저장소 (deque 1개로 모든 데이터 관리) |
+| `data/types.py` | TypedDict 정의 (DashboardData 25개 키) |
+
+### 기존 파일
 
 | 파일 | 역할 |
 |------|------|
 | `run.py` | 통합 진입점 (CLI: `--mode`, `--interface`, `--port`) |
 | `config.py` | 모든 설정 중앙 관리 |
-| `constants.py` | 상수 정의 (장치 목록, ICD 크기 등) |
-| `styles.py` | UI 스타일 상수 (색상, 폰트) |
 | `capture/sniffer.py` | Scapy 패킷 캡처 (BPF 필터링) |
+| `capture/queue.py` | 스레드 안전 패킷 버퍼 |
 | `parser/icd_parser.py` | ICD v1.0 바이너리 파싱 |
-| `analysis/stats_calculator.py` | 지터, PPS, 가용성 계산 (5분 윈도우) |
-| `data/live_provider.py` | 캡처+파싱 통합, UI 데이터 제공 |
+| `data/live_provider.py` | 캡처 제어 + DashboardData 생성 |
 | `callbacks/update_callbacks.py` | 2초 폴링 및 UI 갱신 |
-| `components/alerts.py` | 알림 조건 체크, 토스트 생성 |
-| `utils/alert_logger.py` | 알림 로그 파일 기록 |
+
+## 데이터 흐름 (파일 순서)
+
+```
+1. sniffer.py      →  UDP 캡처 → Tuple[datetime, bytes]
+2. queue.py        →  deque 저장
+3. packet_processor.py  →  언패킹 + 파싱 + 저장
+4. packet_store.py →  통합 저장 (deque[PacketRecord])
+5. live_provider.py →  Dict(25키) 생성
+6. update_callbacks.py →  UI 컴포넌트 변환
+```
 
 ## 실행 방법
 
