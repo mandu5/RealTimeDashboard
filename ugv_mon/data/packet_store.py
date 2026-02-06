@@ -1,0 +1,468 @@
+"""
+통합 패킷 저장소.
+
+모든 패킷 데이터를 단일 deque에 저장하고,
+용도에 맞게 변환하여 제공합니다.
+
+데이터 흐름:
+    PacketProcessor → PacketStore.add() → deque[PacketRecord]
+                                              │
+                                              ├── get_stats_dict()  → 통계
+                                              ├── get_logs()        → 로그 UI
+                                              ├── get_chart_data()  → 차트 UI
+                                              └── get_history()     → 이력 UI
+
+기존 모듈 대체:
+    - stats_calculator.py의 통계 계산 기능
+    - live_provider.py의 deque 저장 기능
+"""
+
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Optional, Dict, List, Tuple
+import threading
+import logging
+
+logger = logging.getLogger(__name__)
+
+# 임계값 상수
+MAX_GAP_MS = 3000         # 3초 이상 갭 → 스트림 재시작
+MAX_JITTER_MS = 200       # 200ms 이상 지터 → 이상치
+
+
+@dataclass
+class PacketRecord:
+    """통합 패킷 레코드.
+    
+    통계 계산과 UI 표시에 필요한 모든 필드를 포함합니다.
+    
+    Attributes:
+        timestamp: 패킷 캡처 시각
+        msg_code: ICD 메시지 코드
+        sequence: 시퀀스 번호 (0~15)
+        size: 패킷 크기 (bytes)
+        jitter_ms: 지터 값 (ms)
+        interval_ms: 패킷 간격 (ms)
+        parse_ok: 파싱 성공 여부
+        checksum_ok: 체크섬 검증 성공 여부
+        operation_mode: 운용 모드
+        authority: 운용 권한
+    """
+    timestamp: datetime
+    msg_code: int
+    sequence: int
+    size: int
+    jitter_ms: Optional[float]
+    interval_ms: Optional[float]
+    parse_ok: bool
+    checksum_ok: bool
+    operation_mode: str = "---"
+    authority: str = "---"
+    
+    def to_log_dict(self) -> Dict:
+        """로그 표시용 Dict 변환."""
+        return {
+            "timestamp": self.timestamp.strftime("%H:%M:%S"),
+            "sequence": self.sequence,
+            "msg_code": f"0x{self.msg_code:02X}",
+            "parse_ok": self.parse_ok,
+            "checksum_ok": self.checksum_ok,
+            "mode": self.operation_mode,
+            "authority": self.authority,
+            "error": "" if self.parse_ok else "파싱 실패",
+        }
+    
+    def to_chart_point(self, pps: int) -> Dict:
+        """차트 데이터 포인트 변환."""
+        jitter = self.jitter_ms if self.jitter_ms and self.jitter_ms <= MAX_JITTER_MS else 0
+        return {
+            "timestamp": self.timestamp.strftime("%H:%M:%S"),
+            "pps": pps,
+            "jitter": round(jitter, 2),
+        }
+
+
+class PacketStore:
+    """통합 패킷 저장소.
+    
+    단일 deque에 모든 패킷 데이터를 저장하고,
+    통계 계산 및 UI 표시용 데이터를 제공합니다.
+    
+    Attributes:
+        window_sec: 데이터 보관 윈도우 (초, 기본 3600)
+        max_records: 최대 레코드 수 (기본 360000)
+    """
+    
+    def __init__(self, window_sec: int = 3600, max_records: int = 360000):
+        self._window_sec = window_sec
+        self._records: deque[PacketRecord] = deque(maxlen=max_records)
+        self._lock = threading.Lock()
+        
+        # 지터 계산용 상태 (msg_code별)
+        self._last_by_code: Dict[int, Dict] = {}
+        
+        # 패킷 손실 계산용
+        self._loss_by_code: Dict[int, int] = {}
+        
+        # 차트 데이터 캐시 (2초마다 갱신)
+        self._chart_cache: List[Dict] = []
+        self._chart_cache_time: Optional[datetime] = None
+        
+        # 연결 이력
+        self._connection_history: List[Dict] = []
+        self._last_connection_state: Optional[bool] = None
+        
+        # 모드 전이 이력
+        self._mode_transitions: List[Dict] = []
+        self._last_op_mode: Optional[str] = None
+        
+        # 비상정지 통계
+        self._emergency_counts: Dict[str, int] = {}
+    
+    # =========================================================================
+    # 패킷 추가
+    # =========================================================================
+    
+    def add(self, record: PacketRecord) -> Optional[float]:
+        """패킷 추가 및 지터 반환.
+        
+        Args:
+            record: 패킷 레코드
+            
+        Returns:
+            계산된 지터 (ms), 계산 불가시 None
+        """
+        with self._lock:
+            # 지터 계산
+            jitter_ms, interval_ms = self._calculate_jitter(
+                record.timestamp, 
+                record.msg_code
+            )
+            
+            # 패킷 손실 계산
+            self._calculate_packet_loss(record.msg_code, record.sequence)
+            
+            # 레코드에 지터/간격 추가
+            updated_record = PacketRecord(
+                timestamp=record.timestamp,
+                msg_code=record.msg_code,
+                sequence=record.sequence,
+                size=record.size,
+                jitter_ms=jitter_ms,
+                interval_ms=interval_ms,
+                parse_ok=record.parse_ok,
+                checksum_ok=record.checksum_ok,
+                operation_mode=record.operation_mode,
+                authority=record.authority,
+            )
+            
+            self._records.append(updated_record)
+            self._prune_old_records(record.timestamp)
+            
+            return jitter_ms
+    
+    def _calculate_jitter(
+        self, 
+        timestamp: datetime, 
+        msg_code: int
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """지터 계산."""
+        if msg_code not in self._last_by_code:
+            self._last_by_code[msg_code] = {
+                "timestamp": None, 
+                "interval": None, 
+                "sequence": None
+            }
+        
+        code_data = self._last_by_code[msg_code]
+        prev_ts = code_data.get("timestamp")
+        
+        if prev_ts is None:
+            code_data["timestamp"] = timestamp
+            code_data["interval"] = None
+            return None, None
+        
+        interval_ms = (timestamp - prev_ts).total_seconds() * 1000
+        code_data["timestamp"] = timestamp
+        
+        # 큰 갭 스킵
+        if interval_ms > MAX_GAP_MS:
+            code_data["interval"] = None
+            return None, interval_ms
+        
+        prev_interval = code_data.get("interval")
+        jitter_ms = None
+        
+        if isinstance(prev_interval, (int, float)) and prev_interval <= MAX_GAP_MS:
+            diff = abs(interval_ms - prev_interval)
+            if diff <= 5:  # JITTER_THRESHOLD_MS
+                jitter_ms = diff
+        
+        code_data["interval"] = interval_ms
+        return jitter_ms, interval_ms
+    
+    def _calculate_packet_loss(self, msg_code: int, sequence: int) -> None:
+        """패킷 손실 계산."""
+        if msg_code not in self._last_by_code:
+            return
+        
+        code_data = self._last_by_code[msg_code]
+        prev_seq = code_data.get("sequence")
+        code_data["sequence"] = sequence
+        
+        if prev_seq is not None:
+            gap = ((sequence & 0x0F) - (prev_seq & 0x0F)) % 16
+            if gap > 1:
+                self._loss_by_code[msg_code] = (
+                    self._loss_by_code.get(msg_code, 0) + (gap - 1)
+                )
+    
+    def _prune_old_records(self, current_time: datetime) -> None:
+        """오래된 레코드 제거."""
+        cutoff = current_time - timedelta(seconds=self._window_sec)
+        while self._records and self._records[0].timestamp < cutoff:
+            self._records.popleft()
+    
+    # =========================================================================
+    # 통계 조회 (stats_calculator 대체)
+    # =========================================================================
+    
+    def get_pps(self) -> int:
+        """초당 패킷 수 (최근 1초)."""
+        with self._lock:
+            if not self._records:
+                return 0
+            one_sec_ago = datetime.now() - timedelta(seconds=1)
+            return sum(1 for r in self._records if r.timestamp >= one_sec_ago)
+    
+    def get_current_jitter(self) -> float:
+        """현재(최신) 지터 값."""
+        with self._lock:
+            for r in reversed(self._records):
+                if r.jitter_ms is not None and r.jitter_ms <= MAX_JITTER_MS:
+                    return round(r.jitter_ms, 2)
+            return 0.0
+    
+    def get_jitter_percentiles(self) -> Tuple[float, float]:
+        """지터 P95, P99 반환."""
+        with self._lock:
+            jitters = [
+                r.jitter_ms for r in self._records
+                if r.jitter_ms is not None and r.jitter_ms <= MAX_JITTER_MS
+            ]
+            if not jitters:
+                return (0.0, 0.0)
+            sorted_j = sorted(jitters)
+            n = len(sorted_j)
+            p95 = sorted_j[min(int(n * 0.95), n - 1)]
+            p99 = sorted_j[min(int(n * 0.99), n - 1)]
+            return (round(p95, 2), round(p99, 2))
+    
+    def get_packet_loss(self) -> int:
+        """총 패킷 손실 수."""
+        with self._lock:
+            return sum(self._loss_by_code.values())
+    
+    def get_availability(self, window_sec: int = 300) -> float:
+        """가용성 계산 (%)."""
+        with self._lock:
+            if not self._records:
+                return 0.0
+            window_start = datetime.now() - timedelta(seconds=window_sec)
+            recent = [r for r in self._records if r.timestamp >= window_start]
+            if len(recent) < 2:
+                return 0.0
+            expected = 100 * window_sec
+            return round(min(len(recent) / expected * 100, 100), 1)
+    
+    def get_hourly_availability(self) -> float:
+        """최근 1시간 가용성."""
+        return self.get_availability(window_sec=3600)
+    
+    def get_stats_dict(self) -> Dict:
+        """전체 통계 딕셔너리."""
+        p95, p99 = self.get_jitter_percentiles()
+        return {
+            "pps": self.get_pps(),
+            "jitter_current": self.get_current_jitter(),
+            "jitter_p95": p95,
+            "jitter_p99": p99,
+            "packet_loss": self.get_packet_loss(),
+            "availability": self.get_availability(),
+        }
+    
+    def get_msg_code_distribution(self) -> Dict[int, int]:
+        """msg_code별 패킷 수."""
+        with self._lock:
+            result: Dict[int, int] = {}
+            for r in self._records:
+                result[r.msg_code] = result.get(r.msg_code, 0) + 1
+            return result
+    
+    def get_stats_by_code(self, msg_code: int = None) -> Dict:
+        """msg_code별 통계."""
+        with self._lock:
+            if msg_code is not None:
+                filtered = [r for r in self._records if r.msg_code == msg_code]
+                one_sec_ago = datetime.now() - timedelta(seconds=1)
+                sizes = [r.size for r in filtered]
+                return {
+                    "pps": sum(1 for r in filtered if r.timestamp >= one_sec_ago),
+                    "packet_loss": self._loss_by_code.get(msg_code, 0),
+                    "avg_size": round(sum(sizes) / len(sizes), 1) if sizes else 0,
+                    "count": len(filtered),
+                }
+            else:
+                codes = set(r.msg_code for r in self._records)
+                return {code: self.get_stats_by_code(code) for code in codes}
+    
+    # =========================================================================
+    # UI 데이터 조회 (live_provider deque 대체)
+    # =========================================================================
+    
+    def get_logs(self, limit: int = 50) -> List[Dict]:
+        """로그 표시용 데이터."""
+        with self._lock:
+            recent = list(self._records)[-limit:]
+            return [r.to_log_dict() for r in reversed(recent)]
+    
+    def get_chart_data(self, limit: int = 180) -> List[Dict]:
+        """차트 표시용 데이터."""
+        with self._lock:
+            # 캐시 확인 (1초 이내면 캐시 반환)
+            now = datetime.now()
+            if (self._chart_cache_time and 
+                (now - self._chart_cache_time).total_seconds() < 1):
+                return self._chart_cache
+            
+            # 초당 집계
+            if not self._records:
+                return []
+            
+            pps = self.get_pps()
+            recent = list(self._records)[-limit:]
+            result = [r.to_chart_point(pps) for r in recent]
+            
+            # 캐시 갱신
+            self._chart_cache = result
+            self._chart_cache_time = now
+            
+            return result
+    
+    def get_parse_success_rate(self) -> float:
+        """파싱 성공률 (%)."""
+        with self._lock:
+            if not self._records:
+                return 0.0
+            success = sum(1 for r in self._records if r.parse_ok)
+            return round(success / len(self._records) * 100, 1)
+    
+    def get_checksum_fail_rate(self) -> float:
+        """체크섬 실패율 (%)."""
+        with self._lock:
+            if not self._records:
+                return 0.0
+            fail = sum(1 for r in self._records if not r.checksum_ok)
+            return round(fail / len(self._records) * 100, 1)
+    
+    # =========================================================================
+    # 이력 관리
+    # =========================================================================
+    
+    def record_connection_change(self, connected: bool) -> None:
+        """연결 상태 변경 기록."""
+        with self._lock:
+            if self._last_connection_state == connected:
+                return
+            
+            now = datetime.now()
+            
+            # 이전 항목에 duration 계산
+            if self._connection_history:
+                prev = self._connection_history[-1]
+                if prev.get("duration") is None:
+                    prev_time = datetime.fromisoformat(prev["timestamp"])
+                    prev["duration"] = round((now - prev_time).total_seconds(), 1)
+            
+            self._connection_history.append({
+                "timestamp": now.isoformat(),
+                "connected": connected,
+                "duration": None,
+            })
+            
+            # 최대 100개 유지
+            if len(self._connection_history) > 100:
+                self._connection_history = self._connection_history[-100:]
+            
+            self._last_connection_state = connected
+    
+    def record_mode_transition(self, new_mode: str) -> None:
+        """운용 모드 전이 기록."""
+        with self._lock:
+            if self._last_op_mode and self._last_op_mode != new_mode:
+                self._mode_transitions.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "from": self._last_op_mode,
+                    "to": new_mode,
+                })
+                
+                # 최대 50개 유지
+                if len(self._mode_transitions) > 50:
+                    self._mode_transitions = self._mode_transitions[-50:]
+            
+            self._last_op_mode = new_mode
+    
+    def record_emergency(self, reasons: List[str]) -> None:
+        """비상정지 원인 기록."""
+        with self._lock:
+            for reason in reasons:
+                self._emergency_counts[reason] = (
+                    self._emergency_counts.get(reason, 0) + 1
+                )
+    
+    def get_connection_history(self, limit: int = 10) -> List[Dict]:
+        """연결 이력."""
+        with self._lock:
+            return self._connection_history[-limit:]
+    
+    def get_mode_transitions(self, limit: int = 10) -> List[Dict]:
+        """모드 전이 이력."""
+        with self._lock:
+            return self._mode_transitions[-limit:]
+    
+    def get_emergency_counts(self) -> Dict[str, int]:
+        """비상정지 원인별 카운트."""
+        with self._lock:
+            return dict(self._emergency_counts)
+    
+    # =========================================================================
+    # 상태 제어
+    # =========================================================================
+    
+    def reset(self) -> None:
+        """전체 상태 초기화."""
+        with self._lock:
+            self._records.clear()
+            self._last_by_code.clear()
+            self._loss_by_code.clear()
+            self._chart_cache.clear()
+            self._chart_cache_time = None
+            self._connection_history.clear()
+            self._last_connection_state = None
+            self._mode_transitions.clear()
+            self._last_op_mode = None
+            self._emergency_counts.clear()
+    
+    def reset_stream_state(self) -> None:
+        """스트림 상태만 리셋 (인터페이스 전환 시)."""
+        with self._lock:
+            logger.info("[STORE] reset_stream_state")
+            self._last_by_code.clear()
+            self._loss_by_code.clear()
+    
+    @property
+    def record_count(self) -> int:
+        """현재 저장된 레코드 수."""
+        with self._lock:
+            return len(self._records)
