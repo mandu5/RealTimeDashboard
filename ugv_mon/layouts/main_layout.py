@@ -17,7 +17,6 @@ from .panels import (
     create_charts_panel,
     create_availability_panel,
     create_log_panel,
-    create_msg_code_stats_panel,
     create_connection_history_panel,
     create_mode_transitions_panel,
     create_emergency_stats_panel,
@@ -49,7 +48,6 @@ def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantinePro
             # - 새로고침 시 초기값(False)으로 자동 리셋됨.
             # - Dash 공식 패턴: 콜백 간 클라이언트 상태 공유에 dcc.Store 사용 권장.
             dcc.Store(id="is-paused", data=False),
-            dcc.Store(id="chart-time-range", data=60),
             
             # 폴링 인터벌
             dcc.Interval(
@@ -100,7 +98,6 @@ def _create_main_content(data: Dict) -> html.Div:
             html.Div(
                 children=[
                     create_device_panel(data.get("devices", [])),
-                    create_msg_code_stats_panel(data),  # Phase 3
                     create_charts_panel(data),
                     create_availability_panel(data),
                 ],
