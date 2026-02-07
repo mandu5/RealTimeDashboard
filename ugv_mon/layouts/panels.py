@@ -255,7 +255,7 @@ def create_charts_panel(data: Dict) -> dmc.Card:
 
 
 def _chart_header() -> html.Div:
-    """차트 헤더 (타이틀 + 범례 + 시간 범위 버튼)."""
+    """차트 헤더 (타이틀 + 범례)."""
     return html.Div(
         children=[
             panel_header_inline("통신 품질 차트"),
@@ -265,14 +265,6 @@ def _chart_header() -> html.Div:
                     _legend_item("지터 (우)", COLORS["purple"]),
                 ],
                 style=flex_row("16px"),
-            ),
-            html.Div(
-                children=[
-                    dmc.Button("30s", id="time-range-30s", variant="outline", size="xs", style={"minWidth": "40px"}),
-                    dmc.Button("1m", id="time-range-1m", variant="filled", size="xs", style={"minWidth": "40px"}),
-                    dmc.Button("5m", id="time-range-5m", variant="outline", size="xs", style={"minWidth": "40px"}),
-                ],
-                style=flex_row("4px"),
             ),
         ],
         style={
@@ -347,21 +339,10 @@ def _legend_item(label: str, color: str) -> html.Div:
 # =============================================================================
 
 def create_availability_panel(data: Dict) -> dmc.Card:
-    """가용성 타임라인 패널 (10분/1시간 가용성 + 타임라인 차트)."""
-    avail_10m = data.get("availability", 0)
-    avail_1h = data.get("availabilityHourly", 0)
-
+    """가용성 타임라인 패널."""
     return dmc.Card(
         children=[
             panel_header("가용성 타임라인"),
-            dmc.Group(
-                [
-                    dmc.Badge(f"10분: {avail_10m:.1f}%", color="blue", variant="light", size="lg"),
-                    dmc.Badge(f"1시간: {avail_1h:.1f}%", color="teal", variant="light", size="lg"),
-                ],
-                gap="md",
-                mb="sm",
-            ),
             dcc.Graph(
                 id="availability-timeline",
                 figure=create_availability_timeline(data.get("availabilitySegments", [])),
@@ -397,77 +378,9 @@ def create_log_panel(logs: list) -> dmc.Card:
 
 
 # =============================================================================
-# 7. 메시지 코드별 통계 패널
+# 7. 연결 이력 패널
 # =============================================================================
 
-MSG_CODE_NAMES = {
-    0x01: "상태보고",
-    0x25: "긴급상태",
-    0x40: "제어응답",
-    0x10: "센서",
-}
-
-
-def create_msg_code_stats_panel(data: Dict) -> dmc.Card:
-    """메시지 코드별 통계 패널 (탭 UI)."""
-    stats = data.get("msgCodeStats", {})
-
-    tabs_list = []
-    tab_panels = []
-
-    for code, name in MSG_CODE_NAMES.items():
-        code_stats = stats.get(code, {"pps": 0, "packet_loss": 0, "avg_size": 0, "count": 0})
-        tabs_list.append(dmc.TabsTab(f"0x{code:02X}", value=str(code)))
-        tab_panels.append(
-            dmc.TabsPanel(
-                children=[
-                    dmc.SimpleGrid(
-                        cols=4,
-                        children=[
-                            _stat_box("PPS", f"{code_stats.get('pps', 0)}/s"),
-                            _stat_box("패킷 손실", f"{code_stats.get('packet_loss', 0)}"),
-                            _stat_box("평균 크기", f"{code_stats.get('avg_size', 0):.0f}B"),
-                            _stat_box("총 패킷", f"{code_stats.get('count', 0):,}"),
-                        ],
-                    ),
-                ],
-                value=str(code),
-                pt="sm",
-            )
-        )
-
-    return dmc.Card(
-        children=[
-            panel_header("메시지 코드별 통계"),
-            html.Div(
-                id="msg-code-stats-container",
-                children=[
-                    dmc.Tabs(
-                        value="1",
-                        children=[dmc.TabsList(tabs_list, grow=True), *tab_panels],
-                    ),
-                ],
-            ),
-        ],
-        withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
-    )
-
-
-def _stat_box(label: str, value: str) -> dmc.Paper:
-    """통계 박스 (탭 내부 사용)."""
-    return dmc.Paper(
-        children=[
-            dmc.Text(label, size="xs", c="dimmed"),
-            dmc.Text(value, size="lg", fw=600),
-        ],
-        p="sm", radius="md", withBorder=True,
-        style={"textAlign": "center"},
-    )
-
-
-# =============================================================================
-# 8. 연결 이력 패널
-# =============================================================================
 
 def create_connection_history_panel(data: Dict) -> dmc.Card:
     """연결 상태 변경 이력 패널."""

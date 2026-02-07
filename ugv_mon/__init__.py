@@ -1,1 +1,0 @@
-"""UGV-MON Dashboard Package."""
