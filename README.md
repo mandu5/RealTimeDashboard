@@ -23,14 +23,17 @@ pip install -r requirements.txt
 ### 2. 실행
 
 #### Mock 모드 (개발/테스트용)
+
 ```bash
 python3 run.py
 python3 run.py --mode mock
 ```
+
 - 가짜 데이터로 UI 확인
 - 네트워크 권한 불필요
 
 #### Live 모드 (실제 패킷 캡처)
+
 ```bash
 # CLI 인자 방식 (권장)
 sudo python3 run.py --mode live --interface lo
@@ -62,12 +65,12 @@ options:
 
 ## 환경변수
 
-| 변수명 | 설명 | 기본값 |
-|--------|------|--------|
-| `UGV_MON_USE_LIVE` | `true`면 Live 모드 | Mock 모드 |
-| `UGV_MON_INTERFACE` | 캡처 인터페이스 | `lo` |
-| `UGV_MON_PORT` | 서버 포트 | `8050` |
-| `UGV_MON_DEBUG` | 디버그 모드 | `false` |
+| 변수명              | 설명               | 기본값    |
+| ------------------- | ------------------ | --------- |
+| `UGV_MON_USE_LIVE`  | `true`면 Live 모드 | Mock 모드 |
+| `UGV_MON_INTERFACE` | 캡처 인터페이스    | `lo`      |
+| `UGV_MON_PORT`      | 서버 포트          | `8050`    |
+| `UGV_MON_DEBUG`     | 디버그 모드        | `false`   |
 
 ## 프로젝트 구조
 
@@ -135,12 +138,14 @@ Network → Sniffer → Queue → PacketProcessor → PacketStore(deque) → Liv
 ## 테스트
 
 ### 단위 테스트
+
 ```bash
 pip install pytest
 python -m pytest tests/ -v
 ```
 
 ### 통합 테스트 (패킷 캡처)
+
 ```bash
 pip install scapy
 sudo python3 test_capture_packets.py
@@ -152,7 +157,8 @@ sudo python3 test_capture_packets.py
 - `docs/01_ARCHITECTURE.md` - 아키텍처 구조
 - `docs/02_FILE_STRUCTURE.md` - 파일별 역할
 - `docs/03_ICD_SPECIFICATION.md` - ICD v1.0 파싱 규격
-- `docs/05_KPI_DATA_ANALYSIS.md` - KPI 상세 분석
-- `docs/11_FINAL_PRESENTATION.md` - 발표 자료
-- `docs/12_DATA_FLOW_GUIDE.md` - 데이터 흐름 가이드
-- `docs/13_ADVANCED_ANALYSIS_PLAN.md` - ML/AI 확장 계획
+- `docs/04_KPI_METRICS.md` - KPI 정의 및 분석
+- `docs/05_ML_ANOMALY_DETECTION.md` - ML 이상 탐지
+- `docs/06_DATA_FLOW_GUIDE.md` - 데이터 흐름 가이드
+- `docs/07_OJT_WEEKLY_LOGS.md` - OJT 실습 일지 (8주)
+- `docs/Final_Project_Report.md` - 최종 프로젝트 보고서
