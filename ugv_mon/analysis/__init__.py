@@ -11,15 +11,15 @@ ML 분석 모듈.
 """
 
 from .feature_extractor import FeatureExtractor, FeatureVector
-from .ml_anomaly_detector import MLAnomalyDetector, AnomalyResult
+from .ml_anomaly_detector import AnomalyResult, MLAnomalyDetector
 from .ml_pipeline import MLPipeline
 from .rule_detector import RuleDetector, RuleResult
 
 __all__ = [
+    "AnomalyResult",
     "FeatureExtractor",
     "FeatureVector",
     "MLAnomalyDetector",
-    "AnomalyResult",
     "MLPipeline",
     "RuleDetector",
     "RuleResult",

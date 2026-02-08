@@ -4,15 +4,14 @@ UGV-MON 상수 정의.
 프로젝트 전반에서 사용되는 상수를 중앙 집중화합니다.
 """
 
-from typing import List, Dict
 
 # =============================================================================
 # 장치(Device) 관련 상수
 # =============================================================================
 
-DEVICE_IDS: List[str] = ["vic", "rdc", "adc", "fcam", "rcam", "acam", "scs", "dip", "tcc", "tm"]
-DEVICE_NAMES: List[str] = ["VIC", "RDC", "ADC", "FCAM", "RCAM", "ACAM", "SCS", "DIP", "TCC", "TM"]
-DEVICE_ID_TO_NAME: Dict[str, str] = dict(zip(DEVICE_IDS, DEVICE_NAMES))
+DEVICE_IDS: list[str] = ["vic", "rdc", "adc", "fcam", "rcam", "acam", "scs", "dip", "tcc", "tm"]
+DEVICE_NAMES: list[str] = ["VIC", "RDC", "ADC", "FCAM", "RCAM", "ACAM", "SCS", "DIP", "TCC", "TM"]
+DEVICE_ID_TO_NAME: dict[str, str] = dict(zip(DEVICE_IDS, DEVICE_NAMES))
 
 # =============================================================================
 # 시퀀스/패킷 관련 상수

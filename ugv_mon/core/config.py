@@ -61,7 +61,7 @@ class Config:
     def from_env(cls) -> "Config":
         """환경변수에서 설정 로드."""
         cfg = cls()
-        
+
         if os.getenv("UGV_MON_DEBUG"):
             cfg.app.debug = os.getenv("UGV_MON_DEBUG").lower() == "true"
         if os.getenv("UGV_MON_PORT"):

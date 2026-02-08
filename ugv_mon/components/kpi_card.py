@@ -4,10 +4,10 @@ KPI Card Component for UGV-MON Dashboard.
 핵심 성능 지표를 카드 형식으로 표시합니다.
 """
 
-from dash import html
 import dash_mantine_components as dmc
+from dash import html
 
-from ..styles import VALUE_LARGE, UNIT_SMALL, LABEL_SMALL
+from ..styles import LABEL_SMALL, UNIT_SMALL, VALUE_LARGE
 
 
 def create_kpi_card(
@@ -22,15 +22,15 @@ def create_kpi_card(
     value_display = [html.Span(str(value), style=VALUE_LARGE)]
     if unit:
         value_display.append(html.Span(f" {unit}", style=UNIT_SMALL))
-    
+
     content = [
         html.Div(title, style=LABEL_SMALL),
         html.Div(value_display),
     ]
-    
+
     if show_progress:
         content.append(dmc.Progress(value=min(progress_value, 100), color=progress_color, size="sm", style={"marginTop": "8px"}))
-    
+
     return dmc.Card(children=[html.Div(content)], withBorder=True, p="md", radius="md", style={"height": "100%"})
 
 

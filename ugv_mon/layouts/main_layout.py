@@ -5,36 +5,36 @@ Main Dashboard Layout for UGV-MON.
 나중에 멀티페이지로 확장 시 pages/dashboard.py로 이동 가능합니다.
 """
 
-from dash import dcc, html
-import dash_mantine_components as dmc
-from typing import Dict
 
-from .header import create_header_bar
-from .panels import (
-    create_operational_status_panel,
-    create_emergency_status_panel,
-    create_device_panel,
-    create_charts_panel,
-    create_availability_panel,
-    create_log_panel,
-    create_connection_history_panel,
-    create_mode_transitions_panel,
-    create_emergency_stats_panel,
-    create_ml_analysis_panel,
-)
+import dash_mantine_components as dmc
+from dash import dcc, html
+
 from ..components.kpi_card import create_kpi_cards_row
 from ..core import config
-from ..styles import PAGE_CONTAINER, TWO_COLUMN_GRID, KPI_GRID, FLEX_COLUMN
+from ..styles import FLEX_COLUMN, KPI_GRID, PAGE_CONTAINER, TWO_COLUMN_GRID
+from .header import create_header_bar
+from .panels import (
+    create_availability_panel,
+    create_charts_panel,
+    create_connection_history_panel,
+    create_device_panel,
+    create_emergency_stats_panel,
+    create_emergency_status_panel,
+    create_log_panel,
+    create_ml_analysis_panel,
+    create_mode_transitions_panel,
+    create_operational_status_panel,
+)
 
 
-def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantineProvider:
+def create_main_layout(initial_data: dict, initial_logs: list) -> dmc.MantineProvider:
     """
     대시보드 메인 레이아웃 생성.
-    
+
     Args:
         initial_data: 초기 대시보드 상태
         initial_logs: 초기 로그 엔트리
-        
+
     Returns:
         MantineProvider로 래핑된 레이아웃
     """
@@ -49,14 +49,14 @@ def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantinePro
             # - 새로고침 시 초기값(False)으로 자동 리셋됨.
             # - Dash 공식 패턴: 콜백 간 클라이언트 상태 공유에 dcc.Store 사용 권장.
             dcc.Store(id="is-paused", data=False),
-            
+
             # 폴링 인터벌
             dcc.Interval(
                 id="interval-component",
                 interval=config.ui.poll_interval_ms,
                 n_intervals=0,
             ),
-            
+
             # 메인 컨텐츠
             html.Div(
                 children=[
@@ -71,7 +71,7 @@ def create_main_layout(initial_data: Dict, initial_logs: list) -> dmc.MantinePro
     )
 
 
-def _create_kpi_section(data: Dict) -> html.Div:
+def _create_kpi_section(data: dict) -> html.Div:
     """KPI 카드 섹션."""
     return html.Div(
         id="kpi-cards",
@@ -80,7 +80,7 @@ def _create_kpi_section(data: Dict) -> html.Div:
     )
 
 
-def _create_main_content(data: Dict) -> html.Div:
+def _create_main_content(data: dict) -> html.Div:
     """메인 콘텐츠 (2컬럼 레이아웃)."""
     return html.Div(
         children=[

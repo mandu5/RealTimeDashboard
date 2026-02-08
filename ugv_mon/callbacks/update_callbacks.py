@@ -1,28 +1,29 @@
 """Dash 콜백 모듈 - 대시보드 상호작용 처리."""
 
 import logging
+from typing import Protocol
+
 from dash import Input, Output, State, html
 from dash.exceptions import PreventUpdate
-from typing import Dict, Protocol, List
 
-from ..components.kpi_card import create_kpi_cards_row
-from ..layouts.header import create_status_chips
 from ..components.device_grid import create_device_grid
+from ..components.kpi_card import create_kpi_cards_row
+from ..layouts.charts import create_availability_timeline, create_communication_chart
+from ..layouts.header import create_status_chips
 from ..layouts.panels import (
-    create_operational_status_boxes,
-    create_emergency_indicators,
     create_connection_history_content,
-    create_mode_transitions_content,
+    create_emergency_indicators,
     create_emergency_stats_content,
+    create_mode_transitions_content,
+    create_operational_status_boxes,
 )
-from ..layouts.charts import create_communication_chart, create_availability_timeline
 
 logger = logging.getLogger(__name__)
 
 
 class DataProviderProtocol(Protocol):
     """데이터 제공자 인터페이스."""
-    def update_data(self, prev_data: Dict) -> Dict: ...
+    def update_data(self, prev_data: dict) -> dict: ...
     def clear_logs(self) -> None: ...
 
 
@@ -30,7 +31,7 @@ def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     """모든 대시보드 콜백 등록."""
     if data_provider is None:
         raise ValueError("data_provider cannot be None")
-    
+
     _register_data_callback(app, data_provider)
     _register_component_callback(app, data_provider)
     _register_control_callbacks(app, data_provider)
@@ -81,12 +82,12 @@ def _register_component_callback(app, provider) -> None:
         chart_data = data.get("combinedData", [])
         latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
         is_conn = getattr(provider, '_is_connected', False)
-        
+
         btn_children = [
             html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
             html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
         ]
-        
+
         return (
             create_status_chips(data),
             create_kpi_cards_row(data),
@@ -109,15 +110,15 @@ def _register_component_callback(app, provider) -> None:
 
 def _register_control_callbacks(app, provider) -> None:
     """제어 버튼 콜백."""
-    @app.callback(Output("is-paused", "data"), Input("pause-btn", "n_clicks"), 
+    @app.callback(Output("is-paused", "data"), Input("pause-btn", "n_clicks"),
                   State("is-paused", "data"), prevent_initial_call=True)
     def toggle_pause(n_clicks, is_paused):
         return not is_paused
-    
+
     @app.callback(Output("pause-btn", "children"), Input("is-paused", "data"))
     def update_pause_text(is_paused):
         return "Resume" if is_paused else "Pause"
-    
+
     @app.callback(Output("dashboard-data", "data", allow_duplicate=True),
                   Input("clear-btn", "n_clicks"), State("dashboard-data", "data"), prevent_initial_call=True)
     def clear_logs(n_clicks, current_data):
@@ -142,7 +143,7 @@ def _register_ui_callbacks(app, provider) -> None:
             html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
         ]
         return (btn_children, "filled" if is_conn else "outline", "green" if is_conn else "red")
-    
+
     @app.callback(
         [Output("direction-toggle-btn", "children", allow_duplicate=True),
          Output("direction-toggle-btn", "color", allow_duplicate=True)],
@@ -162,13 +163,13 @@ def _register_ui_callbacks(app, provider) -> None:
 
 def _register_ml_panel_callback(app) -> None:
     """ML 패널 업데이트 콜백."""
-    from ..charts import (
+    from ..layouts.ml_charts import (
         create_anomaly_3d_scatter,
         create_anomaly_timeline,
-        create_feature_contribution_chart,
         create_confidence_gauge,
+        create_feature_contribution_chart,
     )
-    
+
     @app.callback(
         [
             Output("ml-3d-scatter", "figure"),
@@ -185,7 +186,7 @@ def _register_ml_panel_callback(app) -> None:
         contributing_features = ml_data.get("contributing_features", [])
         confidence = ml_data.get("confidence", 0)
         anomaly_scores = [r.get("anomaly_score", 0) for r in records] if records else []
-        
+
         return (
             create_anomaly_3d_scatter(records, anomaly_scores),
             create_anomaly_timeline(score_history),

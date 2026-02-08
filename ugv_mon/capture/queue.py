@@ -4,8 +4,8 @@
 
 import threading
 from collections import deque
-from typing import List, Optional, Tuple
 from datetime import datetime
+from typing import Optional
 
 
 class PacketQueue:
@@ -15,28 +15,28 @@ class PacketQueue:
         self._queue: deque = deque(maxlen=max_size)
         self._lock = threading.Lock()
         self._last_put_time: Optional[datetime] = None
-        self._last_packet: Optional[Tuple[datetime, bytes]] = None  # 중복 체크용
+        self._last_packet: Optional[tuple[datetime, bytes]] = None  # 중복 체크용
 
-    def put(self, packet: Tuple[datetime, bytes]) -> None:
+    def put(self, packet: tuple[datetime, bytes]) -> None:
         """패킷 추가 (튜플: capture_time, raw_data)."""
         with self._lock:
             # 튜플의 두 번째 요소(raw_data)로 중복 체크
             raw_data = packet[1] if isinstance(packet, tuple) else packet
             last_raw = self._last_packet[1] if isinstance(self._last_packet, tuple) and self._last_packet else None
-            
+
             if raw_data == last_raw:
                 return
-            
+
             self._last_packet = packet
             self._queue.append(packet)
             self._last_put_time = datetime.now()
 
-    def get(self) -> Optional[Tuple[datetime, bytes]]:
+    def get(self) -> Optional[tuple[datetime, bytes]]:
         """패킷 하나 꺼내기."""
         with self._lock:
             return self._queue.popleft() if self._queue else None
 
-    def get_all(self) -> List[Tuple[datetime, bytes]]:
+    def get_all(self) -> list[tuple[datetime, bytes]]:
         """모든 패킷 꺼내기."""
         with self._lock:
             packets = list(self._queue)

@@ -5,22 +5,28 @@ UGV-MON 대시보드 패널 모듈.
 main_layout.py와 update_callbacks.py에서 import하여 사용합니다.
 """
 
-from dash import dcc, html
+from typing import Optional
+
 import dash_mantine_components as dmc
-from typing import Dict, List
+from dash import dcc, html
 
 from ..styles import (
-    COLORS, CARD_MARGIN, PANEL_HEADER, PANEL_TITLE,
-    indicator_bar, flex_row, status_box_style, led_style,
+    CARD_MARGIN,
+    COLORS,
+    PANEL_HEADER,
+    PANEL_TITLE,
+    flex_row,
+    indicator_bar,
+    led_style,
+    status_box_style,
 )
-from .charts import create_communication_chart, create_availability_timeline
-
+from .charts import create_availability_timeline, create_communication_chart
 
 # =============================================================================
 # 공통 헬퍼
 # =============================================================================
 
-def panel_header(title: str, color: str = None) -> html.Div:
+def panel_header(title: str, color: Optional[str] = None) -> html.Div:
     """패널 헤더 (인디케이터 바 + 타이틀).
 
     Args:
@@ -63,7 +69,7 @@ def _format_iso_timestamp(iso_str: str) -> str:
 # 1. 운용 상태 패널
 # =============================================================================
 
-def create_operational_status_panel(data: Dict) -> dmc.Card:
+def create_operational_status_panel(data: dict) -> dmc.Card:
     """운용 상태 패널 (운용모드 / 권한 / 주행상태 3개 박스)."""
     return dmc.Card(
         children=[
@@ -78,7 +84,7 @@ def create_operational_status_panel(data: Dict) -> dmc.Card:
     )
 
 
-def create_operational_status_boxes(data: Dict) -> List:
+def create_operational_status_boxes(data: dict) -> list:
     """운용 상태 3개 박스 생성."""
     STATUS_STYLES = {
         "mode": {
@@ -133,7 +139,7 @@ def _status_box(
 # 2. 비상정지 상태 패널
 # =============================================================================
 
-def create_emergency_status_panel(emergency_status: Dict[str, bool]) -> dmc.Card:
+def create_emergency_status_panel(emergency_status: dict[str, bool]) -> dmc.Card:
     """비상정지 원인 패널 (LED 인디케이터)."""
     return dmc.Card(
         children=[
@@ -148,7 +154,7 @@ def create_emergency_status_panel(emergency_status: Dict[str, bool]) -> dmc.Card
     )
 
 
-def create_emergency_indicators(emergency_status: Dict[str, bool]) -> List:
+def create_emergency_indicators(emergency_status: dict[str, bool]) -> list:
     """비상정지 인디케이터 리스트 생성."""
     return [
         _emergency_indicator(name, is_active)
@@ -198,7 +204,7 @@ def _emergency_indicator(name: str, is_active: bool) -> html.Div:
 # 3. 장치 연결 상태 패널
 # =============================================================================
 
-def create_device_panel(devices: List[Dict]) -> dmc.Card:
+def create_device_panel(devices: list[dict]) -> dmc.Card:
     """장치 연결 상태 패널 (10개 장치 5x2 그리드)."""
     from ..components.device_grid import create_device_grid
 
@@ -232,7 +238,7 @@ def create_device_panel(devices: List[Dict]) -> dmc.Card:
 # 4. 통신 품질 차트 패널
 # =============================================================================
 
-def create_charts_panel(data: Dict) -> dmc.Card:
+def create_charts_panel(data: dict) -> dmc.Card:
     """통신 품질 차트 패널 (PPS + 지터 듀얼 Y축)."""
     chart_data = data.get("combinedData", [])
     latest_pps = chart_data[-1].get("pps", 0) if chart_data else 0
@@ -346,7 +352,7 @@ def _legend_item(label: str, color: str) -> html.Div:
 # 5. 가용성 타임라인 패널
 # =============================================================================
 
-def create_availability_panel(data: Dict) -> dmc.Card:
+def create_availability_panel(data: dict) -> dmc.Card:
     """가용성 타임라인 패널 (10분/1시간 가용성 + 타임라인 차트)."""
     avail_10m = data.get("availability", 0)
     avail_1h = data.get("availabilityHourly", 0)
@@ -408,14 +414,14 @@ MSG_CODE_NAMES = {
 }
 
 
-def create_msg_code_stats_panel(data: Dict) -> dmc.Card:
+def create_msg_code_stats_panel(data: dict) -> dmc.Card:
     """메시지 코드별 통계 패널 (탭 UI)."""
     stats = data.get("msgCodeStats", {})
 
     tabs_list = []
     tab_panels = []
 
-    for code, name in MSG_CODE_NAMES.items():
+    for code, _name in MSG_CODE_NAMES.items():
         code_stats = stats.get(code, {"pps": 0, "packet_loss": 0, "avg_size": 0, "count": 0})
         tabs_list.append(dmc.TabsTab(f"0x{code:02X}", value=str(code)))
         tab_panels.append(
@@ -469,7 +475,7 @@ def _stat_box(label: str, value: str) -> dmc.Paper:
 # 8. 연결 이력 패널
 # =============================================================================
 
-def create_connection_history_panel(data: Dict) -> dmc.Card:
+def create_connection_history_panel(data: dict) -> dmc.Card:
     """연결 상태 변경 이력 패널."""
     return dmc.Card(
         children=[
@@ -483,7 +489,7 @@ def create_connection_history_panel(data: Dict) -> dmc.Card:
     )
 
 
-def create_connection_history_content(data: Dict) -> List:
+def create_connection_history_content(data: dict) -> list:
     """연결 이력 컨텐츠 (콜백에서도 사용)."""
     history = data.get("connectionHistory", [])
 
@@ -510,7 +516,7 @@ def create_connection_history_content(data: Dict) -> List:
 # 9. 운용모드 전이 패널
 # =============================================================================
 
-def create_mode_transitions_panel(data: Dict) -> dmc.Card:
+def create_mode_transitions_panel(data: dict) -> dmc.Card:
     """운용 모드 전이 이력 패널."""
     return dmc.Card(
         children=[
@@ -524,7 +530,7 @@ def create_mode_transitions_panel(data: Dict) -> dmc.Card:
     )
 
 
-def create_mode_transitions_content(data: Dict) -> List:
+def create_mode_transitions_content(data: dict) -> list:
     """운용모드 전이 컨텐츠 (콜백에서도 사용)."""
     transitions = data.get("modeTransitions", [])
 
@@ -548,7 +554,7 @@ def create_mode_transitions_content(data: Dict) -> List:
 # 10. 비상정지 원인 통계 패널
 # =============================================================================
 
-def create_emergency_stats_panel(data: Dict) -> dmc.Card:
+def create_emergency_stats_panel(data: dict) -> dmc.Card:
     """비상정지 원인별 발생 횟수 패널."""
     return dmc.Card(
         children=[
@@ -562,7 +568,7 @@ def create_emergency_stats_panel(data: Dict) -> dmc.Card:
     )
 
 
-def create_emergency_stats_content(data: Dict) -> List:
+def create_emergency_stats_content(data: dict) -> list:
     """비상정지 통계 컨텐츠 (콜백에서도 사용)."""
     counts = data.get("emergencyCounts", {})
 
@@ -585,22 +591,22 @@ def create_emergency_stats_content(data: Dict) -> List:
 # Section 8: ML 이상 탐지 패널
 # =============================================================================
 
-def create_ml_analysis_panel(data: Dict) -> dmc.Card:
+def create_ml_analysis_panel(data: dict) -> dmc.Card:
     """ML 이상 탐지 분석 패널.
-    
+
     3D 산점도, 타임라인, 기여 특성을 표시합니다.
     모델이 준비되지 않았으면 로딩 상태를 표시합니다.
     """
-    from ..charts import (
+    from .ml_charts import (
         create_anomaly_3d_scatter,
         create_anomaly_timeline,
-        create_feature_contribution_chart,
         create_confidence_gauge,
+        create_feature_contribution_chart,
     )
-    
+
     ml_data = data.get("ml", {})
     model_status = ml_data.get("model_status", "not_ready")
-    
+
     # 모델 준비 안 됨
     if model_status == "not_ready":
         return dmc.Card(
@@ -617,7 +623,7 @@ def create_ml_analysis_panel(data: Dict) -> dmc.Card:
             ],
             withBorder=True, p="lg", radius="md",
         )
-    
+
     # ML 결과 추출
     is_anomaly = ml_data.get("is_anomaly", False)
     confidence = ml_data.get("confidence", 0)
@@ -625,7 +631,7 @@ def create_ml_analysis_panel(data: Dict) -> dmc.Card:
     records = ml_data.get("records", [])
     score_history = ml_data.get("score_history", [])
     anomaly_scores = [r.get("anomaly_score", 0) for r in records] if records else []
-    
+
     return dmc.Card(
         children=[
             # 헤더 + 상태 배지
@@ -647,7 +653,7 @@ def create_ml_analysis_panel(data: Dict) -> dmc.Card:
                 ],
                 style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "16px"},
             ),
-            
+
             # 3D 산점도 + 신뢰도 게이지
             html.Div(
                 children=[
@@ -672,7 +678,7 @@ def create_ml_analysis_panel(data: Dict) -> dmc.Card:
                 ],
                 style={"display": "flex", "gap": "16px"},
             ),
-            
+
             # 타임라인 + 기여 특성
             html.Div(
                 children=[

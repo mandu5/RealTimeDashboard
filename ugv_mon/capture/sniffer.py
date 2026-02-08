@@ -2,16 +2,16 @@
 Scapy 기반 패킷 스니퍼.
 """
 
-import threading
 import logging
-from datetime import datetime
-from typing import Callable, Optional, Tuple
-
+import threading
 import warnings
+from datetime import datetime
+from typing import Callable, Optional
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 try:
-    from scapy.all import sniff, UDP, Raw
+    from scapy.all import UDP, Raw, sniff
     from scapy.packet import Packet
     SCAPY_AVAILABLE = True
 except ImportError:

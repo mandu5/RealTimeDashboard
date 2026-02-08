@@ -26,18 +26,18 @@ import logging
 import os
 from datetime import datetime
 from threading import Lock
-from typing import Dict, List, Optional
+from typing import Optional
 
-from ..core import config, DEVICE_NAMES
+from ..core import DEVICE_NAMES, config
 from ..core.models import EMERGENCY_SOURCE_NAMES
 
 logger = logging.getLogger(__name__)
 
 try:
-    from ..capture import PacketSniffer, PacketQueue, PacketProcessor
+    from ..analysis import FeatureExtractor, MLPipeline, RuleDetector
+    from ..capture import PacketProcessor, PacketQueue, PacketSniffer
     from ..parser import ICDParser
     from .packet_store import PacketStore
-    from ..analysis import MLPipeline, FeatureExtractor, RuleDetector
     CAPTURE_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Capture modules not available: {e}")
@@ -46,58 +46,58 @@ except ImportError as e:
 
 class LiveDataProvider:
     """실시간 대시보드 데이터 제공자.
-    
+
     책임:
         - 캡처 제어 (start/stop)
         - DashboardData 생성
-    
+
     데이터 흐름:
         PacketQueue → PacketProcessor → PacketStore → _build_dashboard_data() → Dict
     """
 
-    def __init__(self, interface: str = None):
+    def __init__(self, interface: Optional[str] = None):
         self._interface = interface or os.getenv("UGV_MON_INTERFACE") or config.network.interface
-        
+
         # 양방향 캡처용 포트
         self._vic_port = config.network.vic_port   # 50000
         self._ocs_port = config.network.ocs_port   # 61000
-        
+
         # 현재 캡처 방향
         self._current_direction = "status"
         self._src_port = self._vic_port
         self._dst_port = self._ocs_port
-        
+
         self._lock = Lock()
-        
+
         # 캡처 컴포넌트
         self._sniffer: Optional[PacketSniffer] = None
         self._packet_queue: Optional[PacketQueue] = None
         self._parser: Optional[ICDParser] = None
         self._store: Optional[PacketStore] = None
         self._processor: Optional[PacketProcessor] = None
-        
+
         # 상태
         self._is_connected = False
         self._last_packet_time: Optional[datetime] = None
         self._last_payload = None
-        
+
         # 통계 카운터
         self._total_packets = 0
         self._parse_success = 0
         self._checksum_fail = 0
-        
+
         # 가용성 세그먼트 (회사 방식)
         self._start_time: datetime = datetime.now()
-        self._availability_segments: List[Dict] = []
+        self._availability_segments: list[dict] = []
         self._last_avail_change_time: Optional[datetime] = None
         self._last_avail_state: Optional[bool] = None
-        
+
         # ML 이상 탐지
         self._ml_pipeline: Optional[MLPipeline] = None
         self._rule_detector: Optional[RuleDetector] = None  # 앙상블용
-        self._ml_score_history: List[Dict] = []  # 최근 60개 점수 기록
-        self._ml_records: List[Dict] = []  # 최근 100개 레코드
-        
+        self._ml_score_history: list[dict] = []  # 최근 60개 점수 기록
+        self._ml_records: list[dict] = []  # 최근 100개 레코드
+
         if CAPTURE_AVAILABLE:
             self._init_modules()
 
@@ -123,7 +123,7 @@ class LiveDataProvider:
     # =========================================================================
     # 캡처 제어
     # =========================================================================
-    
+
     def start_capture(self) -> bool:
         """캡처 시작."""
         if not CAPTURE_AVAILABLE:
@@ -132,9 +132,9 @@ class LiveDataProvider:
             self._cleanup_sniffer()
         try:
             self._sniffer = PacketSniffer(
-                self._interface, 
-                self._src_port, 
-                self._dst_port, 
+                self._interface,
+                self._src_port,
+                self._dst_port,
                 self._packet_queue.put
             )
             self._sniffer.start()
@@ -168,7 +168,7 @@ class LiveDataProvider:
                 if self._store:
                     self._store.reset_stream_state()
                 return False
-            
+
             if self._store:
                 self._store.reset_stream_state()
             return self.start_capture()
@@ -178,7 +178,7 @@ class LiveDataProvider:
         with self._lock:
             if self._sniffer:
                 self.stop_capture()
-            
+
             # 방향 전환
             if self._current_direction == "status":
                 self._current_direction = "control"
@@ -188,21 +188,21 @@ class LiveDataProvider:
                 self._current_direction = "status"
                 self._src_port = self._vic_port
                 self._dst_port = self._ocs_port
-            
+
             logger.info(f"Direction changed: {self._current_direction} ({self._src_port}→{self._dst_port})")
-            
+
             # 스트림 상태 초기화
             if self._store:
                 self._store.reset()
-            
+
             # 통계 초기화
             self._total_packets = 0
             self._parse_success = 0
             self._checksum_fail = 0
-            
+
             if self._is_connected:
                 self.start_capture()
-            
+
             return self._current_direction
 
     @property
@@ -213,12 +213,12 @@ class LiveDataProvider:
     # =========================================================================
     # 데이터 생성/업데이트
     # =========================================================================
-    
-    def generate_initial_data(self) -> Dict:
+
+    def generate_initial_data(self) -> dict:
         """초기 대시보드 데이터 생성."""
         return self._build_dashboard_data()
 
-    def update_data(self, prev_data: Dict) -> Dict:
+    def update_data(self, prev_data: dict) -> dict:
         """데이터 업데이트."""
         with self._lock:
             # 패킷 처리 (packet_processor 사용)
@@ -227,23 +227,23 @@ class LiveDataProvider:
                 self._total_packets += result.count
                 self._parse_success += result.success_count
                 self._checksum_fail += result.checksum_fail_count
-                
+
                 if result.last_payload:
                     self._last_payload = result.last_payload
-                
+
                 if result.count > 0:
                     self._last_packet_time = datetime.now()
-            
+
             # 타임아웃 체크
             self._check_connection_timeout()
-            
+
             # 가용성 상태 기록
             self._record_uptime_segment(self._is_connected)
-            
+
             # 연결 상태 기록
             if self._store:
                 self._store.record_connection_change(self._is_connected)
-            
+
             return self._build_dashboard_data()
 
     def _check_connection_timeout(self):
@@ -256,7 +256,7 @@ class LiveDataProvider:
     # =========================================================================
     # 가용성 세그먼트 (회사 방식)
     # =========================================================================
-    
+
     def _record_uptime_segment(self, new_is_up: bool) -> None:
         """연결 상태 변화 시 가용성(uptime) 세그먼트 기록."""
         now = datetime.now()
@@ -271,7 +271,7 @@ class LiveDataProvider:
 
         start_sec = (self._last_avail_change_time - self._start_time).total_seconds()
         end_sec = (now - self._start_time).total_seconds()
-        
+
         self._availability_segments.append({
             "start": max(0, start_sec),
             "end": max(0, end_sec),
@@ -290,32 +290,32 @@ class LiveDataProvider:
             seg for seg in self._availability_segments if seg["end"] > cutoff
         ]
 
-    def _build_availability_segments(self) -> List[Dict]:
+    def _build_availability_segments(self) -> list[dict]:
         """가용성 세그먼트 반환."""
         timeline_sec = config.ui.timeline_duration_sec
         now = datetime.now()
         current_offset = (now - self._start_time).total_seconds()
-        
+
         if not self._availability_segments:
             return [{"start": 0, "end": timeline_sec, "isUp": self._is_connected}]
-        
+
         normalized = []
         for seg in self._availability_segments:
             start_pos = timeline_sec - (current_offset - seg["start"])
             end_pos = timeline_sec - (current_offset - seg["end"])
-            
+
             if end_pos < 0 or start_pos > timeline_sec:
                 continue
-            
+
             normalized.append({
                 "start": max(0, start_pos),
                 "end": min(timeline_sec, end_pos),
                 "isUp": seg["isUp"],
             })
-        
+
         if self._last_avail_change_time:
             last_start = timeline_sec - (
-                current_offset - 
+                current_offset -
                 (self._last_avail_change_time - self._start_time).total_seconds()
             )
             if last_start < timeline_sec:
@@ -324,14 +324,14 @@ class LiveDataProvider:
                     "end": timeline_sec,
                     "isUp": self._last_avail_state if self._last_avail_state is not None else self._is_connected,
                 })
-        
+
         return normalized if normalized else [{"start": 0, "end": timeline_sec, "isUp": self._is_connected}]
 
     # =========================================================================
     # 상태 빌드 (DashboardData 생성)
     # =========================================================================
 
-    def _build_dashboard_data(self) -> Dict:
+    def _build_dashboard_data(self) -> dict:
         """전체 대시보드 데이터 빌드 (25키).
 
         4개 하위 빌더의 결과를 병합하여 DashboardData 딕셔너리를 구성합니다.
@@ -344,7 +344,7 @@ class LiveDataProvider:
             "ml": self._build_ml_data(),
         }
 
-    def _build_connection_info(self) -> Dict:
+    def _build_connection_info(self) -> dict:
         """연결 정보 (5키): 연결여부, 인터페이스, 방향, 필터, 마지막 패킷 시각."""
         return {
             "connected": self._is_connected,
@@ -354,7 +354,7 @@ class LiveDataProvider:
             "lastPacketTime": self._last_packet_time.strftime("%H:%M:%S") if self._last_packet_time else "",
         }
 
-    def _build_kpi_metrics(self) -> Dict:
+    def _build_kpi_metrics(self) -> dict:
         """KPI 지표 (8키): PPS, 파싱률, 체크섬, 손실, 가용성, 지터."""
         if self._store:
             stats = self._store.get_stats_dict()
@@ -362,7 +362,7 @@ class LiveDataProvider:
         else:
             stats = {}
             hourly_avail = 0.0
-        
+
         return {
             "capturePps": stats.get("pps", 0),
             "parseSuccess": round((self._parse_success / max(self._total_packets, 1)) * 100, 1),
@@ -374,7 +374,7 @@ class LiveDataProvider:
             "jitterP95": stats.get("jitter_p95", 0.0),
         }
 
-    def _build_operational_info(self) -> Dict:
+    def _build_operational_info(self) -> dict:
         """운용 정보 (4키): 운용모드, 권한, 주행상태, 비상정지."""
         if self._last_payload:
             p = self._last_payload
@@ -388,10 +388,10 @@ class LiveDataProvider:
             "operationalMode": "--- (대기 중)",
             "operationalAuthority": "--- (대기 중)",
             "drivingState": "--- (대기 중)",
-            "emergencyStatus": {name: False for name in EMERGENCY_SOURCE_NAMES} | {"처리완료": False},
+            "emergencyStatus": dict.fromkeys(EMERGENCY_SOURCE_NAMES, False) | {"처리완료": False},
         }
 
-    def _build_ui_display_data(self) -> Dict:
+    def _build_ui_display_data(self) -> dict:
         """UI 렌더링용 데이터 (7키): 차트, 장치, 가용성, 이력."""
         # 장치 상태
         if self._last_payload:
@@ -401,7 +401,7 @@ class LiveDataProvider:
             ]
         else:
             devices = [{"name": n, "connected": False} for n in DEVICE_NAMES]
-        
+
         # 저장소에서 데이터 가져오기
         if self._store:
             chart_data = self._store.get_chart_data(limit=180)
@@ -415,7 +415,7 @@ class LiveDataProvider:
             connection_history = []
             mode_transitions = []
             emergency_counts = {}
-        
+
         return {
             "combinedData": chart_data,
             "devices": devices,
@@ -429,8 +429,8 @@ class LiveDataProvider:
     # =========================================================================
     # 로그 관련
     # =========================================================================
-    
-    def get_logs(self, limit: int = 50) -> List[Dict]:
+
+    def get_logs(self, limit: int = 50) -> list[dict]:
         """로그 목록 반환."""
         with self._lock:
             if self._store:
@@ -454,34 +454,34 @@ class LiveDataProvider:
     # ML 이상 탐지
     # =========================================================================
 
-    def _build_ml_data(self) -> Dict:
+    def _build_ml_data(self) -> dict:
         """앙상블 이상 탐지 데이터 빌드.
-        
+
         Rule-Based + ML 앙상블:
         1. Rule 탐지는 항상 실행 (Cold Start 대응)
         2. ML은 학습 완료 후 실행
         3. 둘 중 하나라도 이상이면 최종 이상 판정
         """
         now = datetime.now()
-        
+
         # 현재 통계 가져오기
         if not self._store:
             return {"model_status": "not_ready"}
-        
+
         current_stats = self._get_current_stats_for_ml()
-        
+
         # 레코드 히스토리 업데이트
         self._update_ml_records(current_stats, now)
-        
+
         # === Rule-Based 탐지 (항상 실행) ===
         rule_result = None
         if self._rule_detector:
             rule_result = self._rule_detector.detect(current_stats)
-        
+
         # === ML 탐지 (학습 후 실행) ===
         ml_result = None
         ml_ready = False
-        
+
         if self._ml_pipeline:
             if not self._ml_pipeline.is_ready:
                 # 학습 시도
@@ -492,16 +492,16 @@ class LiveDataProvider:
                     ml_ready = True
             else:
                 ml_ready = True
-            
+
             if ml_ready:
                 ml_result = self._ml_pipeline.predict(current_stats)
                 self._update_ml_score_history(ml_result.anomaly_score, now)
-        
+
         # === 앙상블 판정 ===
         rule_anomaly = rule_result.is_anomaly if rule_result else False
         ml_anomaly = ml_result.is_anomaly if ml_result else False
         final_anomaly = rule_anomaly or ml_anomaly
-        
+
         # 탐지 소스 결정
         if rule_anomaly and ml_anomaly:
             detection_source = "Both"
@@ -511,7 +511,7 @@ class LiveDataProvider:
             detection_source = "ML"
         else:
             detection_source = None
-        
+
         # 신뢰도 계산
         if ml_result:
             confidence = ml_result.confidence
@@ -519,7 +519,7 @@ class LiveDataProvider:
             confidence = 0.7  # Rule만 있을 때 기본 신뢰도
         else:
             confidence = 0.0
-        
+
         # 기여 특성
         contributing_features = []
         if ml_result and ml_result.contributing_features:
@@ -534,7 +534,7 @@ class LiveDataProvider:
                     "name": rule,
                     "z_score": 2.5,  # Rule 위반은 고정 z-score
                 })
-        
+
         return {
             "model_status": "ready" if ml_ready else "rule_only",
             "is_anomaly": final_anomaly,
@@ -547,11 +547,11 @@ class LiveDataProvider:
             "score_history": self._ml_score_history[-60:],
         }
 
-    def _get_current_stats_for_ml(self) -> Dict:
+    def _get_current_stats_for_ml(self) -> dict:
         """PacketStore에서 ML용 통계 추출."""
         if not self._store:
             return {}
-        
+
         return {
             "jitter_current": self._store.last_jitter or 0,
             "jitter_p95": self._store.get_jitter_p95() or 0,
@@ -562,7 +562,7 @@ class LiveDataProvider:
             "checksum_fail_rate": self._store.get_checksum_fail_rate(),
         }
 
-    def _update_ml_records(self, stats: Dict, now: datetime):
+    def _update_ml_records(self, stats: dict, now: datetime):
         """3D 차트용 레코드 히스토리 업데이트."""
         record = {
             "timestamp": now.strftime("%H:%M:%S"),
@@ -585,7 +585,7 @@ class LiveDataProvider:
         # 최대 120개 유지
         if len(self._ml_score_history) > 120:
             self._ml_score_history = self._ml_score_history[-120:]
-        
+
         # 레코드에 점수 반영
         if self._ml_records:
             self._ml_records[-1]["anomaly_score"] = score

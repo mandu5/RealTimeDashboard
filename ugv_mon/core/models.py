@@ -9,11 +9,10 @@ UGV-MON 통합 데이터 모델.
     3. UI 표시용 모델 - 로그, 장치 상태, 가용성 세그먼트
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Optional, Union, List
 from enum import Enum, IntEnum
-
+from typing import Optional, Union
 
 # =============================================================================
 # 1. 열거형 정의 (Enums)
@@ -21,9 +20,9 @@ from enum import Enum, IntEnum
 
 class MsgCode(IntEnum):
     """ICD 메시지 코드.
-    
+
     VIC-OCS 통신에서 사용되는 메시지 타입을 정의합니다.
-    
+
     Attributes:
         TYPE_01: 운용 상태 메시지 (VIC→OCS, data_length=87)
         REMOTE_CONTROL: 원격 제어 메시지 (OCS→VIC, 80~110Hz)
@@ -44,7 +43,7 @@ class AckFlag(IntEnum):
 
 class DeviceID(IntEnum):
     """장치 ID.
-    
+
     Attributes:
         VIC: 차량 통합 컴퓨터 (0xB1, 포트 50000)
         OCS: 운용통제장치 (0xA2, 포트 61000)
@@ -126,9 +125,9 @@ EMERGENCY_SOURCE_NAMES = [
 @dataclass
 class ICDHeader:
     """ICD v1.0 헤더 (12 bytes).
-    
+
     모든 VIC-OCS 메시지의 공통 헤더 구조입니다.
-    
+
     Attributes:
         timestamp: VIC 시스템 타임스탬프 (ms)
         sequence: 시퀀스 번호 (0~15, 롤오버)
@@ -148,13 +147,13 @@ class ICDHeader:
     reserved: int
     data_length: int
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """딕셔너리 변환 (디버깅/로깅용)."""
         def fmt(val, enum_cls):
             if isinstance(val, enum_cls):
                 return f"{val.name} (0x{val:02X})"
             return f"UNKNOWN (0x{val:02X})"
-        
+
         return {
             "timestamp": self.timestamp,
             "sequence": self.sequence,
@@ -169,9 +168,9 @@ class ICDHeader:
 @dataclass
 class OperationalPayload:
     """운용 상태 페이로드 (MsgCode 0x01, 87 bytes).
-    
+
     VIC에서 OCS로 전송되는 운용 상태 정보입니다.
-    
+
     Attributes:
         device_bits: 장치 연결 비트맵 (10 bits)
         devices: 장치명 → 연결 상태 딕셔너리
@@ -182,7 +181,7 @@ class OperationalPayload:
         emergency_complete: 비상정지 처리 완료 여부
     """
     device_bits: int
-    devices: Dict[str, bool]
+    devices: dict[str, bool]
     operation_mode_raw: int
     operation_mode: str
     authority_raw: int
@@ -190,10 +189,10 @@ class OperationalPayload:
     driving_state_raw: int
     driving_state: str
     emergency_bits: int
-    emergency_sources: List[str]
+    emergency_sources: list[str]
     emergency_complete: bool
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "devices": self.devices,
             "operation_mode": self.operation_mode,
@@ -208,11 +207,11 @@ class OperationalPayload:
         """비상정지 상태 여부."""
         return len(self.emergency_sources) > 0
 
-    def get_emergency_reasons(self) -> List[str]:
+    def get_emergency_reasons(self) -> list[str]:
         """비상정지 원인 리스트."""
         return self.emergency_sources
-    
-    def get_emergency_dict(self) -> Dict[str, bool]:
+
+    def get_emergency_dict(self) -> dict[str, bool]:
         """UI용 비상정지 상태 딕셔너리."""
         result = {src: (src in self.emergency_sources) for src in EMERGENCY_SOURCE_NAMES}
         result["처리완료"] = self.emergency_complete
@@ -222,7 +221,7 @@ class OperationalPayload:
 @dataclass
 class ParseResult:
     """ICD 파싱 결과.
-    
+
     Attributes:
         success: 파싱 성공 여부
         header: 파싱된 헤더 (실패 시 None)
@@ -240,7 +239,7 @@ class ParseResult:
     error: Optional[str] = None
     raw_size: int = 0
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         result = {"success": self.success, "checksum_ok": self.checksum_ok, "raw_size": self.raw_size}
         if self.header:
             result["header"] = self.header.to_dict()
@@ -260,7 +259,7 @@ class ParseResult:
 @dataclass
 class DeviceStatus:
     """장치 연결 상태 (UI 표시용).
-    
+
     Attributes:
         device_id: 장치 식별자 (예: "vic", "rdc")
         name: 표시 이름 (예: "VIC", "RDC")
@@ -276,7 +275,7 @@ class DeviceStatus:
     last_seen: Optional[datetime] = None
     error_reason: Optional[str] = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "id": self.device_id,
             "name": self.name,
@@ -289,7 +288,7 @@ class DeviceStatus:
 @dataclass
 class LogEntry:
     """패킷 로그 엔트리 (테이블 표시용).
-    
+
     Attributes:
         timestamp: 수신 시각
         sequence: 시퀀스 번호
@@ -309,7 +308,7 @@ class LogEntry:
     authority: str = ""
     notes: str = ""
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "time": self.timestamp.strftime("%H:%M:%S"),
             "seq": self.sequence,
@@ -325,9 +324,9 @@ class LogEntry:
 @dataclass
 class AvailabilitySegment:
     """가용성 타임라인 세그먼트.
-    
+
     연속된 연결/끊김 상태를 하나의 구간으로 표현합니다.
-    
+
     Attributes:
         start_sec: 시작 시각 (초, 타임라인 기준)
         end_sec: 종료 시각 (초)
@@ -342,7 +341,7 @@ class AvailabilitySegment:
         """구간 지속 시간 (초)."""
         return self.end_sec - self.start_sec
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "start": self.start_sec,
             "end": self.end_sec,
@@ -350,7 +349,7 @@ class AvailabilitySegment:
         }
 
 
-def build_default_emergency_dict() -> Dict[str, bool]:
+def build_default_emergency_dict() -> dict[str, bool]:
     """기본(모두 비활성) 비상정지 딕셔너리 생성.
 
     EmergencyStatus 클래스를 대체합니다.
@@ -359,4 +358,4 @@ def build_default_emergency_dict() -> Dict[str, bool]:
     Returns:
         EMERGENCY_SOURCE_NAMES 기반 {원인명: False} + {"처리완료": False}
     """
-    return {name: False for name in EMERGENCY_SOURCE_NAMES} | {"처리완료": False}
+    return dict.fromkeys(EMERGENCY_SOURCE_NAMES, False) | {"처리완료": False}

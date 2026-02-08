@@ -12,13 +12,12 @@ Note:
     이 파일은 문서화와 타입 체크 목적.
 """
 
-from typing import TypedDict, List, Dict, Optional
-from typing_extensions import NotRequired
+from typing import Optional, TypedDict
 
 
 class ConnectionState(TypedDict):
     """연결 상태 (5개 키).
-    
+
     Attributes:
         connected: 현재 연결 여부
         interface: 네트워크 인터페이스 (eno2, lo 등)
@@ -35,7 +34,7 @@ class ConnectionState(TypedDict):
 
 class StatsState(TypedDict):
     """통계 상태 (9개 키).
-    
+
     Attributes:
         capturePps: 초당 패킷 수
         parseSuccess: 파싱 성공률 (%)
@@ -58,7 +57,7 @@ class StatsState(TypedDict):
 
 class OperationalState(TypedDict):
     """운용 상태 (4개 키).
-    
+
     Attributes:
         operationalMode: 운용 모드 (자율주행, 원격조종 등)
         operationalAuthority: 운용 권한 (VIC, OCS)
@@ -68,12 +67,12 @@ class OperationalState(TypedDict):
     operationalMode: str
     operationalAuthority: str
     drivingState: str
-    emergencyStatus: Dict[str, bool]
+    emergencyStatus: dict[str, bool]
 
 
 class ChartDataPoint(TypedDict):
     """차트 데이터 포인트.
-    
+
     Attributes:
         timestamp: 시각 (HH:MM:SS)
         pps: 초당 패킷 수
@@ -86,7 +85,7 @@ class ChartDataPoint(TypedDict):
 
 class AvailabilitySegment(TypedDict):
     """가용성 타임라인 세그먼트.
-    
+
     Attributes:
         start: 시작 위치 (초)
         end: 종료 위치 (초)
@@ -99,7 +98,7 @@ class AvailabilitySegment(TypedDict):
 
 class ConnectionHistoryEntry(TypedDict):
     """연결 이력 항목.
-    
+
     Attributes:
         timestamp: ISO 형식 시각
         connected: 연결 여부
@@ -112,7 +111,7 @@ class ConnectionHistoryEntry(TypedDict):
 
 class ModeTransitionEntry(TypedDict):
     """운용모드 전이 항목.
-    
+
     Attributes:
         timestamp: ISO 형식 시각
         from: 이전 모드
@@ -126,7 +125,7 @@ class ModeTransitionEntry(TypedDict):
 
 class DeviceStatus(TypedDict):
     """장치 상태.
-    
+
     Attributes:
         name: 장치 이름
         connected: 연결 여부
@@ -137,7 +136,7 @@ class DeviceStatus(TypedDict):
 
 class UIState(TypedDict):
     """UI 렌더링용 상태 (8개 키).
-    
+
     Attributes:
         combinedData: 차트 데이터 배열
         devices: 장치 상태 배열
@@ -147,29 +146,29 @@ class UIState(TypedDict):
         modeTransitions: 모드 전이 이력
         emergencyCounts: 비상정지 원인별 카운트
     """
-    combinedData: List[ChartDataPoint]
-    devices: List[DeviceStatus]
-    availabilitySegments: List[AvailabilitySegment]
-    msgCodeStats: Dict[int, Dict]
-    connectionHistory: List[ConnectionHistoryEntry]
-    modeTransitions: List[ModeTransitionEntry]
-    emergencyCounts: Dict[str, int]
+    combinedData: list[ChartDataPoint]
+    devices: list[DeviceStatus]
+    availabilitySegments: list[AvailabilitySegment]
+    msgCodeStats: dict[int, dict]
+    connectionHistory: list[ConnectionHistoryEntry]
+    modeTransitions: list[ModeTransitionEntry]
+    emergencyCounts: dict[str, int]
 
 
 class DashboardData(ConnectionState, StatsState, OperationalState, UIState):
     """전체 대시보드 데이터 (26개 키).
-    
-    이 TypedDict는 live_provider.generate_initial_data() 및 
+
+    이 TypedDict는 live_provider.generate_initial_data() 및
     update_data()가 반환하는 데이터의 전체 구조를 정의합니다.
-    
+
     구조:
         - ConnectionState (5개): 연결 상태
         - StatsState (9개): 통계
         - OperationalState (4개): 운용 상태
         - UIState (8개): UI 렌더링용
-        
+
     총 26개 키 = 5 + 9 + 4 + 8
-    
+
     데이터 흐름:
         1. UDP 패킷 수신 (bytes)
         2. PacketQueue에 저장 (deque[Tuple[datetime, bytes]])
