@@ -20,6 +20,7 @@ from .panels import (
     create_connection_history_panel,
     create_mode_transitions_panel,
     create_emergency_stats_panel,
+    create_ml_analysis_panel,
 )
 from ..components.kpi_card import create_kpi_cards_row
 from ..core import config
@@ -100,6 +101,7 @@ def _create_main_content(data: Dict) -> html.Div:
                     create_device_panel(data.get("devices", [])),
                     create_charts_panel(data),
                     create_availability_panel(data),
+                    create_ml_analysis_panel(data),  # ML 이상 탐지
                 ],
                 style=FLEX_COLUMN,
             ),

@@ -255,7 +255,7 @@ def create_charts_panel(data: Dict) -> dmc.Card:
 
 
 def _chart_header() -> html.Div:
-    """차트 헤더 (타이틀 + 범례)."""
+    """차트 헤더 (타이틀 + 범례 + 시간 범위 버튼)."""
     return html.Div(
         children=[
             panel_header_inline("통신 품질 차트"),
@@ -265,6 +265,14 @@ def _chart_header() -> html.Div:
                     _legend_item("지터 (우)", COLORS["purple"]),
                 ],
                 style=flex_row("16px"),
+            ),
+            html.Div(
+                children=[
+                    dmc.Button("30s", id="time-range-30s", variant="outline", size="xs", style={"minWidth": "40px"}),
+                    dmc.Button("1m", id="time-range-1m", variant="filled", size="xs", style={"minWidth": "40px"}),
+                    dmc.Button("5m", id="time-range-5m", variant="outline", size="xs", style={"minWidth": "40px"}),
+                ],
+                style=flex_row("4px"),
             ),
         ],
         style={
@@ -339,10 +347,21 @@ def _legend_item(label: str, color: str) -> html.Div:
 # =============================================================================
 
 def create_availability_panel(data: Dict) -> dmc.Card:
-    """가용성 타임라인 패널."""
+    """가용성 타임라인 패널 (10분/1시간 가용성 + 타임라인 차트)."""
+    avail_10m = data.get("availability", 0)
+    avail_1h = data.get("availabilityHourly", 0)
+
     return dmc.Card(
         children=[
             panel_header("가용성 타임라인"),
+            dmc.Group(
+                [
+                    dmc.Badge(f"10분: {avail_10m:.1f}%", color="blue", variant="light", size="lg"),
+                    dmc.Badge(f"1시간: {avail_1h:.1f}%", color="teal", variant="light", size="lg"),
+                ],
+                gap="md",
+                mb="sm",
+            ),
             dcc.Graph(
                 id="availability-timeline",
                 figure=create_availability_timeline(data.get("availabilitySegments", [])),
@@ -378,9 +397,77 @@ def create_log_panel(logs: list) -> dmc.Card:
 
 
 # =============================================================================
-# 7. 연결 이력 패널
+# 7. 메시지 코드별 통계 패널
 # =============================================================================
 
+MSG_CODE_NAMES = {
+    0x01: "상태보고",
+    0x25: "긴급상태",
+    0x40: "제어응답",
+    0x10: "센서",
+}
+
+
+def create_msg_code_stats_panel(data: Dict) -> dmc.Card:
+    """메시지 코드별 통계 패널 (탭 UI)."""
+    stats = data.get("msgCodeStats", {})
+
+    tabs_list = []
+    tab_panels = []
+
+    for code, name in MSG_CODE_NAMES.items():
+        code_stats = stats.get(code, {"pps": 0, "packet_loss": 0, "avg_size": 0, "count": 0})
+        tabs_list.append(dmc.TabsTab(f"0x{code:02X}", value=str(code)))
+        tab_panels.append(
+            dmc.TabsPanel(
+                children=[
+                    dmc.SimpleGrid(
+                        cols=4,
+                        children=[
+                            _stat_box("PPS", f"{code_stats.get('pps', 0)}/s"),
+                            _stat_box("패킷 손실", f"{code_stats.get('packet_loss', 0)}"),
+                            _stat_box("평균 크기", f"{code_stats.get('avg_size', 0):.0f}B"),
+                            _stat_box("총 패킷", f"{code_stats.get('count', 0):,}"),
+                        ],
+                    ),
+                ],
+                value=str(code),
+                pt="sm",
+            )
+        )
+
+    return dmc.Card(
+        children=[
+            panel_header("메시지 코드별 통계"),
+            html.Div(
+                id="msg-code-stats-container",
+                children=[
+                    dmc.Tabs(
+                        value="1",
+                        children=[dmc.TabsList(tabs_list, grow=True), *tab_panels],
+                    ),
+                ],
+            ),
+        ],
+        withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
+    )
+
+
+def _stat_box(label: str, value: str) -> dmc.Paper:
+    """통계 박스 (탭 내부 사용)."""
+    return dmc.Paper(
+        children=[
+            dmc.Text(label, size="xs", c="dimmed"),
+            dmc.Text(value, size="lg", fw=600),
+        ],
+        p="sm", radius="md", withBorder=True,
+        style={"textAlign": "center"},
+    )
+
+
+# =============================================================================
+# 8. 연결 이력 패널
+# =============================================================================
 
 def create_connection_history_panel(data: Dict) -> dmc.Card:
     """연결 상태 변경 이력 패널."""
@@ -492,3 +579,125 @@ def create_emergency_stats_content(data: Dict) -> List:
             ], justify="space-between")
         )
     return [dmc.Stack(rows, gap="xs")]
+
+
+# =============================================================================
+# Section 8: ML 이상 탐지 패널
+# =============================================================================
+
+def create_ml_analysis_panel(data: Dict) -> dmc.Card:
+    """ML 이상 탐지 분석 패널.
+    
+    3D 산점도, 타임라인, 기여 특성을 표시합니다.
+    모델이 준비되지 않았으면 로딩 상태를 표시합니다.
+    """
+    from ..charts import (
+        create_anomaly_3d_scatter,
+        create_anomaly_timeline,
+        create_feature_contribution_chart,
+        create_confidence_gauge,
+    )
+    
+    ml_data = data.get("ml", {})
+    model_status = ml_data.get("model_status", "not_ready")
+    
+    # 모델 준비 안 됨
+    if model_status == "not_ready":
+        return dmc.Card(
+            children=[
+                panel_header("ML 이상 탐지"),
+                html.Div(
+                    children=[
+                        dmc.Loader(size="lg", color="blue"),
+                        dmc.Text("ML 모델 학습 대기 중...", size="lg", c="dimmed", style={"marginTop": "16px"}),
+                        dmc.Text("데이터 수집 후 자동 시작됩니다.", size="sm", c="dimmed", style={"marginTop": "8px"}),
+                    ],
+                    style={"display": "flex", "flexDirection": "column", "alignItems": "center", "justifyContent": "center", "height": "300px"},
+                ),
+            ],
+            withBorder=True, p="lg", radius="md",
+        )
+    
+    # ML 결과 추출
+    is_anomaly = ml_data.get("is_anomaly", False)
+    confidence = ml_data.get("confidence", 0)
+    contributing_features = ml_data.get("contributing_features", [])
+    records = ml_data.get("records", [])
+    score_history = ml_data.get("score_history", [])
+    anomaly_scores = [r.get("anomaly_score", 0) for r in records] if records else []
+    
+    return dmc.Card(
+        children=[
+            # 헤더 + 상태 배지
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(style=indicator_bar()),
+                            html.Span("ML 이상 탐지", style=PANEL_TITLE),
+                            dmc.Badge(
+                                "이상 감지" if is_anomaly else "정상",
+                                color="red" if is_anomaly else "green",
+                                size="lg",
+                            ),
+                        ],
+                        style=flex_row("12px"),
+                    ),
+                    dmc.Text(f"신뢰도: {confidence:.0%}", size="sm", c="dimmed"),
+                ],
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "16px"},
+            ),
+            
+            # 3D 산점도 + 신뢰도 게이지
+            html.Div(
+                children=[
+                    html.Div(
+                        dcc.Graph(
+                            id="ml-3d-scatter",
+                            figure=create_anomaly_3d_scatter(records, anomaly_scores),
+                            config={"displayModeBar": False},
+                            style={"height": "350px"},
+                        ),
+                        style={"flex": "2"},
+                    ),
+                    html.Div(
+                        dcc.Graph(
+                            id="ml-confidence-gauge",
+                            figure=create_confidence_gauge(confidence),
+                            config={"displayModeBar": False},
+                            style={"height": "180px"},
+                        ),
+                        style={"flex": "1"},
+                    ),
+                ],
+                style={"display": "flex", "gap": "16px"},
+            ),
+            
+            # 타임라인 + 기여 특성
+            html.Div(
+                children=[
+                    html.Div(
+                        dcc.Graph(
+                            id="ml-anomaly-timeline",
+                            figure=create_anomaly_timeline(score_history),
+                            config={"displayModeBar": False},
+                            style={"height": "250px"},
+                        ),
+                        style={"flex": "2"},
+                    ),
+                    html.Div(
+                        dcc.Graph(
+                            id="ml-feature-contribution",
+                            figure=create_feature_contribution_chart(contributing_features),
+                            config={"displayModeBar": False},
+                            style={"height": "200px"},
+                        ),
+                        style={"flex": "1"},
+                    ),
+                ],
+                style={"display": "flex", "gap": "16px", "marginTop": "16px"},
+            ),
+        ],
+        withBorder=True, p="lg", radius="md",
+    )
+

@@ -288,6 +288,38 @@ class PacketStore:
             "availability": self.get_availability(),
         }
     
+    def get_stats_history(self, limit: int = 200) -> List[Dict]:
+        """ML 학습용 통계 히스토리 반환.
+        
+        최근 N개의 레코드에서 ML 특성 추출에 필요한 통계를 반환합니다.
+        
+        Args:
+            limit: 반환할 최대 레코드 수
+            
+        Returns:
+            [{"jitter_current": ..., "pps": ..., ...}, ...]
+        """
+        with self._lock:
+            if not self._records:
+                return []
+            
+            result = []
+            records_list = list(self._records)[-limit:]
+            
+            for i, r in enumerate(records_list):
+                jitter = r.jitter_ms if r.jitter_ms is not None else 0
+                result.append({
+                    "timestamp": r.timestamp.isoformat(),
+                    "jitter_current": jitter,
+                    "jitter_p95": jitter,  # 개별 레코드에서는 P95 계산 불가
+                    "pps": 1,  # 개별 레코드
+                    "loss_rate": 0,  # 집계 후 계산
+                    "parse_success_rate": 100.0 if r.parse_ok else 0.0,
+                    "checksum_fail_rate": 100.0 if not r.checksum_ok else 0.0,
+                })
+            
+            return result
+    
     def get_msg_code_distribution(self) -> Dict[int, int]:
         """msg_code별 패킷 수."""
         with self._lock:
