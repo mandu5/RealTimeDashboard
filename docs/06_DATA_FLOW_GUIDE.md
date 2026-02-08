@@ -1,8 +1,8 @@
 # UGV-MON 데이터 흐름 가이드
 
-> **최종 업데이트**: 2026-02-08
+> **최종 업데이트**: 2026-02-08 (리팩터링 v2)
 
-## 전체 데이터 흐름
+## 전체 데이터 흐름 (단방향)
 
 ```text
 ┌──────────┐   ┌──────────┐   ┌──────────────┐   ┌──────────────┐
@@ -10,67 +10,68 @@
 │  (UDP)   │   │ (Scapy)  │   │ (deque)      │   │ (parse+add)  │
 └──────────┘   └──────────┘   └──────────────┘   └──────┬───────┘
                                                         │
-              ┌─────────────────────────────────────────┘
-              ▼
-┌──────────────────┐   ┌──────────────────────────────────────────┐
-│   PacketStore    │◀──│           LiveDataProvider               │
-│ (deque 단일저장) │   │  (Facade + Orchestrator 패턴)            │
-└────────┬─────────┘   │  - 캡처 컴포넌트 초기화/제어              │
-         │              │  - 상태 관리 (연결, 카운터)              │
-         │              │  - 가용성 세그먼트 계산                  │
-         └─────────────▶│  - Dict(25키) 빌드                      │
-                        └────────────────────┬─────────────────────┘
-                                             │
-                                             ▼
-                                   ┌────────────────┐
-                                   │  UI Components │
-                                   │  (12개 패널)    │
-                                   └────────────────┘
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │   PacketStore   │
+                                               │ (deque 단일저장)│
+                                               └────────┬────────┘
+                                                        │
+    ┌───────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Service Layer                                 │
+├───────────────┬───────────────┬───────────────┬─────────────────┤
+│ CaptureService│ StatsService  │  MLService    │DashboardBuilder │
+│ (캡처 제어)   │ (통계 집계)   │ (이상 탐지)   │ (Dict 빌드)     │
+└───────────────┴───────────────┴───────────────┴─────────────────┘
+                                     │
+                                     ▼
+                            ┌─────────────────┐
+                            │ ServiceProvider │
+                            │ (오케스트레이터)│
+                            └────────┬────────┘
+                                     │
+                                     ▼
+                            ┌────────────────┐
+                            │ UI Components  │
+                            │  (12개 패널)   │
+                            └────────────────┘
 ```
 
 ---
 
-## 1. 캡처 계층 (Capture Layer)
+## 1. 파이프라인 계층 (Pipeline Layer)
 
-### sniffer.py
+### sniffer.py (`pipeline/sniffer.py`)
 
 ```python
-# Scapy BPF 필터로 UDP 패킷 캡처
 def _process_packet(self, packet):
-    capture_time = datetime.now()
     raw_data = bytes(packet[Raw].load)
-    self._callback((capture_time, raw_data))  # Queue로 전달
+    self._callback((datetime.now(), raw_data))  # Queue로 전달
 ```
 
 **출력**: `Tuple[datetime, bytes]`
 
-### queue.py
+### queue.py (`pipeline/queue.py`)
 
 ```python
-# 스레드 안전 deque 저장
 class PacketQueue:
     def push(self, packet: Tuple[datetime, bytes]):
-        with self._lock:
-            self._queue.append(packet)
+        self._queue.append(packet)
 ```
 
 ---
 
 ## 2. 처리 계층 (Processing Layer)
 
-### packet_processor.py
+### processor.py (`pipeline/processor.py`)
 
 ```python
 class PacketProcessor:
-    def __init__(self, queue, parser, store):
-        self._queue = queue
-        self._parser = parser  # ICD 파서 (여기서만 호출)
-        self._store = store
-
     def process_pending(self) -> BatchProcessResult:
         for capture_time, packet_bytes in self._queue.get_all():
             result = self._parser.parse(packet_bytes)  # 파싱
-            record = PacketRecord(...)
             self._store.add(record)                    # 저장
         return BatchProcessResult(count, success_count, ...)
 ```
@@ -80,188 +81,135 @@ class PacketProcessor:
 1. 큐에서 `(datetime, bytes)` 가져오기
 2. **ICD 파서 호출** (파싱은 여기서만)
 3. PacketRecord 생성 + 저장
-4. BatchProcessResult 반환 (집계 결과)
+4. BatchProcessResult 반환
 
 ---
 
-## 3. 저장 계층 (Data Layer)
+## 3. 저장 계층 (Store Layer)
 
-### packet_store.py
+### packet_store.py (`store/packet_store.py`)
 
 ```python
 class PacketStore:
-    def __init__(self, window_sec: int = 3600):
-        self._records: deque[PacketRecord] = deque(maxlen=360000)
-
-    def add(self, record: PacketRecord) -> Optional[float]:
+    def add(self, record: PacketRecord):
         jitter = self._calculate_jitter(record)
-        record.jitter_ms = jitter
         self._records.append(record)
-        return jitter
 ```
 
 **제공 메서드**:
 
 - `get_pps()`, `get_jitter_p95()`, `get_availability()`
-- `get_packet_loss()`, `get_logs()`, `get_chart_data()`
+- `get_logs()`, `get_chart_data()`
 - `get_connection_history()`, `get_mode_transitions()`
 
 ---
 
-## 4. 조율자 계층 (LiveDataProvider - Facade + Orchestrator)
+## 4. 서비스 계층 (Service Layer)
 
-> ⚠️ **LiveDataProvider는 단순 Dict 빌더가 아닙니다!**  
-> 전체 캡처 시스템의 **Facade + Orchestrator** 역할을 합니다.
-
-### 역할 1: 캡처 컴포넌트 초기화 및 제어
+### CaptureService (`services/capture_service.py`)
 
 ```python
-class LiveDataProvider:
-    def __init__(self, interface):
-        # 모든 컴포넌트 생성 및 연결
-        self._packet_queue = PacketQueue()
-        self._parser = ICDParser()
-        self._store = PacketStore()
-        self._processor = PacketProcessor(queue, parser, store)
-        self._ml_pipeline = MLPipeline()
-
-    def start_capture(self):
-        self._sniffer = PacketSniffer(...)
-        self._sniffer.start()
-
-    def stop_capture(self):
-        self._sniffer.stop()
-
-    def toggle_direction(self):
-        # 상태→제어 또는 제어→상태 방향 전환
+class CaptureService:
+    """캡처 제어만 담당 (Single Responsibility)"""
+    def start(self) -> bool    # Sniffer 생성 + 시작
+    def stop(self) -> None     # Sniffer 정리
+    def toggle(self) -> bool   # 시작/중지 토글
+    def toggle_direction(self) -> str  # 포트 방향 전환
 ```
 
-### 역할 2: 상태 관리 및 집계
+### StatsService (`services/stats_service.py`)
 
 ```python
-def update_data(self, prev_data):
-    # 1. Processor 호출 (파싱 수행)
-    result = self._processor.process_pending()
-
-    # 2. 자체 카운터 집계 (Processor 결과 누적)
-    self._total_packets += result.count
-    self._parse_success += result.success_count
-    self._checksum_fail += result.checksum_fail_count
-
-    # 3. 마지막 payload 저장 (운용 정보용)
-    if result.last_payload:
-        self._last_payload = result.last_payload
-
-    # 4. 연결 타임아웃 체크
-    self._check_connection_timeout()
-
-    # 5. 가용성 세그먼트 기록 (회사 방식)
-    self._record_uptime_segment(self._is_connected)
+class StatsService:
+    """통계 카운터/연결 상태 관리"""
+    def update(self, result: BatchProcessResult)
+    def get_parse_rate() -> float
+    def get_checksum_fail_rate() -> float
+    def is_connected() -> bool  # 5초 타임아웃 체크
 ```
 
-### 역할 3: 가용성 세그먼트 계산 (회사 방식)
+### MLService (`services/ml_service.py`)
 
 ```python
-def _record_uptime_segment(self, new_is_up):
-    # 연결/끊김 구간을 시간대별로 기록
-    # 가용성 타임라인 차트용
+class MLService:
+    """Rule+ML 앙상블 탐지"""
+    def predict(self, store: PacketStore) -> dict
 ```
 
-### 역할 4: Dict(25키) 빌드
+### DashboardBuilder (`services/dashboard_builder.py`)
 
 ```python
-def _build_dashboard_data(self) -> dict:
-    return {
-        **self._build_connection_info(),      # 5키 (자체 상태)
-        **self._build_kpi_metrics(),          # 8키 (Store + 자체 카운터)
-        **self._build_operational_info(),     # 4키 (last_payload)
-        **self._build_ui_display_data(),      # 7키 (Store + 자체)
-        "ml": self._build_ml_data(),          # 1키 (ML 파이프라인)
-    }
+class DashboardBuilder:
+    """Dict(25키) 빌드 (순수 함수)"""
+    def build(self, is_connected, direction, ...) -> dict:
+        return {
+            **self._build_connection_info(),  # 5키
+            **self._build_kpi_metrics(),      # 8키
+            **self._build_operational_info(), # 4키
+            **self._build_ui_display_data(),  # 7키
+            "ml": ml_data,                    # 1키
+        }
 ```
 
-**KPI 지표 빌드 예시**:
+### ServiceProvider (`services/service_provider.py`)
 
 ```python
-def _build_kpi_metrics(self):
-    stats = self._store.get_stats_dict()  # Store에서 가져오기
-    return {
-        "capturePps": stats.get("pps", 0),  # Store
-        # 자체 카운터로 계산
-        "parseSuccess": (self._parse_success / self._total_packets) * 100,
-        "checksumFail": (self._checksum_fail / self._total_packets) * 100,
-        "availability": stats.get("availability", 0.0),  # Store
-    }
+class ServiceProvider:
+    """서비스 오케스트레이터 - 콜백 호환 브리지"""
+    def update_data(self, prev_data) -> dict:
+        result = self._processor.process_pending()  # 1. 패킷 처리
+        self._stats.update(result)                  # 2. 통계 업데이트
+        ml_data = self._ml.predict(self._store)     # 3. ML 예측
+        return self._builder.build(...)             # 4. Dict 빌드
+
+    # 콜백에서 호출하는 메서드들
+    def start_capture(self) -> bool   # CaptureService.start() 호출
+    def stop_capture() -> None        # CaptureService.stop() 호출
+    def toggle_connection() -> bool   # 토글 + store/stats 리셋
 ```
 
 ---
 
-## 5. 프레젠테이션 계층 (Callbacks)
-
-### update_callbacks.py
-
-```python
-@callback(Output("dashboard-data", "data"), ...)
-def update_dashboard_data(n, is_paused):
-    return provider.update_data(prev_data)  # LiveProvider 호출
-
-@callback([15개 Output], Input("dashboard-data", "data"))
-def update_main_components(data):
-    # Dict → UI 컴포넌트 변환
-```
-
----
-
-## 폴링 사이클 상세 (2초)
+## 5. 폴링 사이클 (2초)
 
 ```text
 dcc.Interval (2초)
      │
      ▼
-update_dashboard_data()
+1. processor.process_pending()  → Store 저장
      │
-     └── provider.update_data()
-              │
-              ├── 1. processor.process_pending()
-              │        ├── queue.get_all()
-              │        ├── parser.parse()  ← 파싱은 여기서만!
-              │        └── store.add()
-              │
-              ├── 2. 자체 카운터 집계
-              │        (total_packets, parse_success, checksum_fail)
-              │
-              ├── 3. 연결 타임아웃 체크
-              │
-              ├── 4. 가용성 세그먼트 기록
-              │
-              └── 5. _build_dashboard_data()
-                       ├── Store에서 데이터
-                       ├── 자체 카운터로 비율 계산
-                       ├── last_payload로 운용 정보
-                       └── Dict(25키) 반환
-                              │
-                              ▼
-                       dcc.Store 갱신 → UI 업데이트
+2. stats.update(result)         → 통계 집계
+     │
+3. ml.predict(store)            → 이상 탐지
+     │
+4. builder.build(...)           → Dict(25키)
+     │
+     ▼
+dashboard-data Store → UI 갱신
 ```
 
 ---
 
-## LiveProvider vs 다른 컴포넌트
+## 컴포넌트별 역할 비교
 
-| 컴포넌트         | 역할                    | 파싱 여부          |
-| ---------------- | ----------------------- | ------------------ |
-| **Sniffer**      | 네트워크에서 bytes 캡처 | ✗                  |
-| **Queue**        | 스레드 안전 버퍼        | ✗                  |
-| **Processor**    | 파싱 + 저장             | **✓ (여기서만)**   |
-| **Store**        | 통계/이력 저장          | ✗                  |
-| **LiveProvider** | **전체 조율 (Facade)**  | ✗ (Processor 호출) |
+| 컴포넌트         | 역할             | 파싱  | 파일 위치                       |
+| ---------------- | ---------------- | ----- | ------------------------------- |
+| Sniffer          | 네트워크 캡처    | ✗     | `pipeline/sniffer.py`           |
+| Queue            | 스레드 안전 버퍼 | ✗     | `pipeline/queue.py`             |
+| **Processor**    | 파싱 + 저장      | **✓** | `pipeline/processor.py`         |
+| Store            | 통계/이력 저장   | ✗     | `store/packet_store.py`         |
+| CaptureService   | 캡처 제어        | ✗     | `services/capture_service.py`   |
+| StatsService     | 통계 집계        | ✗     | `services/stats_service.py`     |
+| MLService        | 이상 탐지        | ✗     | `services/ml_service.py`        |
+| DashboardBuilder | Dict 빌드        | ✗     | `services/dashboard_builder.py` |
 
 ---
 
-## 왜 LiveProvider가 복잡한가?
+## CaptureService.start() vs ServiceProvider.start_capture()
 
-1. **중앙 집중 제어**: 모든 컴포넌트 생명주기 관리
-2. **상태 집계**: Processor 결과를 Provider 레벨에서 누적
-3. **두 가지 데이터 소스**: Store 통계 + 자체 카운터 조합
-4. **회사 방식 구현**: 가용성 세그먼트 별도 로직
-5. **ML 통합**: 파이프라인 초기화 및 조율
+| 메서드                            | 역할                                                          | 호출 위치            |
+| --------------------------------- | ------------------------------------------------------------- | -------------------- |
+| `CaptureService.start()`          | **단일 책임**: Sniffer 생성 및 시작만                         | ServiceProvider 내부 |
+| `ServiceProvider.start_capture()` | **오케스트레이션**: CaptureService.start() 호출 + 추가 초기화 | Callbacks (UI)       |
+
+**ServiceProvider**는 기존 `LiveDataProvider`를 대체하며, 4개 서비스를 조율하는 **Orchestrator/Facade** 역할입니다.

@@ -121,22 +121,14 @@ def _scores_to_colors(
     scores: list[float],
     threshold: float,
 ) -> list[str]:
-    """이상 점수를 색상으로 변환.
-
-    정상: 파란색 계열 (#3b82f6)
-    이상: 빨간색 계열 (#ef4444)
-    경계: 노란색 계열 (#f59e0b)
-    """
+    """이상 점수를 색상으로 변환."""
     colors = []
     for s in scores:
         if s < threshold:
-            # 이상 (빨간색)
             colors.append("#ef4444")
         elif s < threshold + 0.1:
-            # 경계 (노란색)
             colors.append("#f59e0b")
         else:
-            # 정상 (파란색)
             colors.append("#3b82f6")
     return colors
 
@@ -163,85 +155,4 @@ def _create_empty_figure() -> go.Figure:
             }
         ],
     )
-    return fig
-
-
-def create_anomaly_3d_scatter_animated(
-    records_history: list[list[dict]],
-    scores_history: list[list[float]],
-    frame_duration: int = 500,
-) -> go.Figure:
-    """시간에 따른 3D 산점도 애니메이션.
-
-    시간 경과에 따라 이상 패턴이 어떻게 변화하는지 보여줍니다.
-
-    Args:
-        records_history: 시간별 레코드 리스트의 리스트
-        scores_history: 시간별 이상 점수 리스트의 리스트
-        frame_duration: 프레임 간 간격 (ms)
-
-    Returns:
-        애니메이션이 포함된 Plotly Figure
-    """
-    if not records_history:
-        return _create_empty_figure()
-
-    # 첫 프레임으로 기본 Figure 생성
-    fig = create_anomaly_3d_scatter(records_history[0], scores_history[0] if scores_history else None)
-
-    # 프레임 추가
-    frames = []
-    for i, (records, scores) in enumerate(zip(records_history, scores_history or [[] for _ in records_history])):
-        jitters = [r.get("jitter_current", 0) for r in records]
-        pps_values = [r.get("pps", 0) for r in records]
-        loss_rates = [r.get("loss_rate", 0) for r in records]
-        colors = _scores_to_colors(scores, -0.3) if scores else ["#3b82f6"] * len(records)
-
-        frame = go.Frame(
-            data=[go.Scatter3d(
-                x=jitters,
-                y=pps_values,
-                z=loss_rates,
-                mode="markers",
-                marker={"size": 6, "color": colors, "opacity": 0.8},
-            )],
-            name=str(i),
-        )
-        frames.append(frame)
-
-    fig.frames = frames
-
-    # 애니메이션 버튼 추가
-    fig.update_layout(
-        updatemenus=[
-            {
-                "type": "buttons",
-                "showactive": False,
-                "y": 0,
-                "x": 0.1,
-                "buttons": [
-                    {
-                        "label": "▶ Play",
-                        "method": "animate",
-                        "args": [
-                            None,
-                            {
-                                "frame": {"duration": frame_duration, "redraw": True},
-                                "fromcurrent": True,
-                            },
-                        ],
-                    },
-                    {
-                        "label": "⏸ Pause",
-                        "method": "animate",
-                        "args": [
-                            [None],
-                            {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"},
-                        ],
-                    },
-                ],
-            }
-        ],
-    )
-
     return fig

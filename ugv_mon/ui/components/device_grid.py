@@ -8,7 +8,7 @@ showing the connection status of 10 VIC subsystems.
 
 from dash import html
 
-from ..styles import get_device_status_style
+from ...styles import get_device_status_style
 
 
 def create_device_item(device: dict) -> html.Div:

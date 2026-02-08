@@ -11,7 +11,7 @@ PacketStore 단위 테스트.
 
 import pytest
 from datetime import datetime, timedelta
-from ugv_mon.data.packet_store import PacketStore, PacketRecord
+from ugv_mon.store.packet_store import PacketStore, PacketRecord
 
 
 class TestPacketRecord:

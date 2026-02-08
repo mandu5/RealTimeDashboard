@@ -20,8 +20,8 @@ import os
 import dash
 
 from .callbacks.update_callbacks import register_callbacks
-from .core import config
-from .layouts.main_layout import create_main_layout
+from .config import config
+from .ui.layouts.main_layout import create_main_layout
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -62,15 +62,15 @@ def create_app() -> dash.Dash:
     interface = os.getenv("UGV_MON_INTERFACE", config.network.interface)
 
     if use_live:
-        from .data.live_provider import LiveDataProvider
-        data_gen = LiveDataProvider(interface=interface)
+        from .services import ServiceProvider
+        data_gen = ServiceProvider(interface=interface)
 
         # Live 모드인 경우 패킷 캡처 시작
-        logger.info("Starting packet capture for Live mode...")
+        logger.info("Starting packet capture for Live mode (Service Layer)...")
         success = data_gen.start_capture()
 
         if success:
-            logger.info("✅ Packet capture started successfully")
+            logger.info("✅ Packet capture started successfully (Service Layer)")
         else:
             logger.error(
                 "❌ Failed to start packet capture.\n"
@@ -80,7 +80,7 @@ def create_app() -> dash.Dash:
                 "   3. Check interface: ip link show"
             )
     else:
-        from .data.mock_data import MockDataGenerator
+        from .mock.mock_data import MockDataGenerator
         data_gen = MockDataGenerator()
 
     # =========================================================================

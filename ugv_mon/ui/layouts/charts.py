@@ -12,8 +12,8 @@ from typing import Optional
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ..core import config
-from ..styles import get_chart_colors
+from ...config import config
+from ...styles import get_chart_colors
 
 
 def create_communication_chart(

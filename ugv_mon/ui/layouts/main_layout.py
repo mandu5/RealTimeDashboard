@@ -10,8 +10,8 @@ import dash_mantine_components as dmc
 from dash import dcc, html
 
 from ..components.kpi_card import create_kpi_cards_row
-from ..core import config
-from ..styles import FLEX_COLUMN, KPI_GRID, PAGE_CONTAINER, TWO_COLUMN_GRID
+from ...config import config
+from ...styles import FLEX_COLUMN, KPI_GRID, PAGE_CONTAINER, TWO_COLUMN_GRID
 from .header import create_header_bar
 from .panels import (
     create_availability_panel,

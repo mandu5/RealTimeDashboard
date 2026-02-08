@@ -9,7 +9,7 @@ from typing import Literal, Optional
 
 from dash import html
 
-from ..styles import get_status_color
+from ...styles import get_status_color
 
 StatusVariant = Literal["success", "warning", "destructive", "default", "info"]
 
