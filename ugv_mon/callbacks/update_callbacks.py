@@ -35,6 +35,8 @@ def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     _register_component_callback(app, data_provider)
     _register_control_callbacks(app, data_provider)
     _register_ui_callbacks(app, data_provider)
+    _register_ml_panel_callback(app)  # ML 패널 콜백 추가
+
 
 
 def _register_data_callback(app, provider) -> None:
@@ -156,3 +158,37 @@ def _register_ui_callbacks(app, provider) -> None:
             html.Span(label, style={"fontSize": "12px", "fontWeight": "600"}),
         ]
         return children, "blue" if direction == "status" else "orange"
+
+
+def _register_ml_panel_callback(app) -> None:
+    """ML 패널 업데이트 콜백."""
+    from ..charts import (
+        create_anomaly_3d_scatter,
+        create_anomaly_timeline,
+        create_feature_contribution_chart,
+        create_confidence_gauge,
+    )
+    
+    @app.callback(
+        [
+            Output("ml-3d-scatter", "figure"),
+            Output("ml-anomaly-timeline", "figure"),
+            Output("ml-feature-contribution", "figure"),
+            Output("ml-confidence-gauge", "figure"),
+        ],
+        Input("dashboard-data", "data"),
+    )
+    def update_ml_panel(data):
+        ml_data = data.get("ml", {})
+        records = ml_data.get("records", [])
+        score_history = ml_data.get("score_history", [])
+        contributing_features = ml_data.get("contributing_features", [])
+        confidence = ml_data.get("confidence", 0)
+        anomaly_scores = [r.get("anomaly_score", 0) for r in records] if records else []
+        
+        return (
+            create_anomaly_3d_scatter(records, anomaly_scores),
+            create_anomaly_timeline(score_history),
+            create_feature_contribution_chart(contributing_features),
+            create_confidence_gauge(confidence),
+        )

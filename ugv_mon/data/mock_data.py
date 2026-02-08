@@ -131,6 +131,8 @@ class MockDataGenerator:
                 "원격 비상정지": 2,
                 "신호단절 주행중": 1,
             },
+            # ML 이상 탐지 데이터
+            "ml": self._generate_ml_data(now),
         }
 
     def update_data(self, prev_data: Dict) -> Dict:
@@ -160,6 +162,10 @@ class MockDataGenerator:
 
         # KPI 업데이트 (30% 확률)
         update_kpi = random.random() > 0.7
+        
+        # ML 데이터 동적 업데이트
+        prev_ml = prev_data.get("ml", {})
+        updated_ml = self._update_ml_data(prev_ml, now)
 
         return {
             **prev_data,
@@ -167,6 +173,7 @@ class MockDataGenerator:
             "capturePps": random.randint(1000, 1100) if update_kpi else prev_data.get("capturePps", 1000),
             "jitterP95": round(random.uniform(1.5, 2.5), 1),
             "combinedData": chart_data,
+            "ml": updated_ml,  # ML 데이터 업데이트
         }
 
     def get_logs(self, limit: int = 50) -> List[Dict]:
@@ -180,3 +187,106 @@ class MockDataGenerator:
     @property
     def log_count(self) -> int:
         return len(self._logs_history)
+
+    def _generate_ml_data(self, now: datetime) -> Dict:
+        """ML 이상 탐지 샘플 데이터 생성."""
+        # 10% 확률로 이상 상태
+        is_anomaly = random.random() < 0.1
+        confidence = random.uniform(0.7, 0.95) if is_anomaly else random.uniform(0.1, 0.3)
+        
+        # 3D 산점도용 레코드 (최근 100개)
+        records = []
+        for i in range(100):
+            ts = now - timedelta(seconds=100 - i)
+            record = {
+                "timestamp": ts.strftime("%H:%M:%S"),
+                "jitter_current": random.uniform(1, 5) if not is_anomaly else random.uniform(3, 15),
+                "pps": random.randint(90, 110) if not is_anomaly else random.randint(50, 90),
+                "loss_rate": random.uniform(0, 2) if not is_anomaly else random.uniform(2, 10),
+                "anomaly_score": random.uniform(-0.2, 0.1) if not is_anomaly else random.uniform(-0.8, -0.4),
+            }
+            records.append(record)
+        
+        # 타임라인용 점수 히스토리
+        score_history = [
+            {
+                "timestamp": (now - timedelta(seconds=60 - i)).strftime("%H:%M:%S"),
+                "score": random.uniform(-0.3, 0.1) if random.random() > 0.1 else random.uniform(-0.7, -0.4),
+            }
+            for i in range(60)
+        ]
+        
+        # 기여 특성 (이상일 때만)
+        contributing_features = []
+        if is_anomaly:
+            contributing_features = [
+                {"name": "jitter_volatility", "z_score": random.uniform(2.5, 4.0)},
+                {"name": "pps_trend", "z_score": random.uniform(-3.0, -2.0)},
+                {"name": "loss_rate", "z_score": random.uniform(1.8, 2.5)},
+            ]
+        
+        return {
+            "model_status": "ready",
+            "is_anomaly": is_anomaly,
+            "anomaly_score": random.uniform(-0.5, -0.2) if is_anomaly else random.uniform(-0.1, 0.1),
+            "confidence": confidence,
+            "contributing_features": contributing_features,
+            "records": records,
+            "score_history": score_history,
+        }
+
+    def _update_ml_data(self, prev_ml: Dict, now: datetime) -> Dict:
+        """ML 데이터 실시간 업데이트.
+        
+        기존 데이터를 유지하면서 새로운 포인트를 추가하고 오래된 데이터는 제거합니다.
+        """
+        # 이전 상태 가져오기
+        prev_records = prev_ml.get("records", [])
+        prev_score_history = prev_ml.get("score_history", [])
+        
+        # 이상 상태 확률적 변화 (5% 확률로 상태 전환)
+        prev_is_anomaly = prev_ml.get("is_anomaly", False)
+        if random.random() < 0.05:
+            is_anomaly = not prev_is_anomaly  # 상태 전환
+        else:
+            is_anomaly = prev_is_anomaly  # 유지
+        
+        confidence = random.uniform(0.7, 0.95) if is_anomaly else random.uniform(0.1, 0.3)
+        
+        # 새 레코드 추가 (3D 산점도용)
+        new_record = {
+            "timestamp": now.strftime("%H:%M:%S"),
+            "jitter_current": random.uniform(1, 5) if not is_anomaly else random.uniform(3, 15),
+            "pps": random.randint(90, 110) if not is_anomaly else random.randint(50, 90),
+            "loss_rate": random.uniform(0, 2) if not is_anomaly else random.uniform(2, 10),
+            "anomaly_score": random.uniform(-0.2, 0.1) if not is_anomaly else random.uniform(-0.8, -0.4),
+        }
+        updated_records = (prev_records + [new_record])[-100:]  # 최근 100개 유지
+        
+        # 새 점수 추가 (타임라인용)
+        new_score = {
+            "timestamp": now.strftime("%H:%M:%S"),
+            "score": random.uniform(-0.3, 0.1) if not is_anomaly else random.uniform(-0.7, -0.4),
+        }
+        updated_score_history = (prev_score_history + [new_score])[-60:]  # 최근 60개 유지
+        
+        # 기여 특성 (이상일 때만)
+        contributing_features = []
+        if is_anomaly:
+            contributing_features = [
+                {"name": "jitter_volatility", "z_score": random.uniform(2.5, 4.0)},
+                {"name": "pps_trend", "z_score": random.uniform(-3.0, -2.0)},
+                {"name": "loss_rate", "z_score": random.uniform(1.8, 2.5)},
+            ]
+        
+        return {
+            "model_status": "ready",
+            "is_anomaly": is_anomaly,
+            "anomaly_score": random.uniform(-0.5, -0.2) if is_anomaly else random.uniform(-0.1, 0.1),
+            "confidence": confidence,
+            "contributing_features": contributing_features,
+            "records": updated_records,
+            "score_history": updated_score_history,
+        }
+
+

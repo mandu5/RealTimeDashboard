@@ -37,6 +37,7 @@ try:
     from ..capture import PacketSniffer, PacketQueue, PacketProcessor
     from ..parser import ICDParser
     from .packet_store import PacketStore
+    from ..analysis import MLPipeline, FeatureExtractor, RuleDetector
     CAPTURE_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Capture modules not available: {e}")
@@ -91,6 +92,12 @@ class LiveDataProvider:
         self._last_avail_change_time: Optional[datetime] = None
         self._last_avail_state: Optional[bool] = None
         
+        # ML 이상 탐지
+        self._ml_pipeline: Optional[MLPipeline] = None
+        self._rule_detector: Optional[RuleDetector] = None  # 앙상블용
+        self._ml_score_history: List[Dict] = []  # 최근 60개 점수 기록
+        self._ml_records: List[Dict] = []  # 최근 100개 레코드
+        
         if CAPTURE_AVAILABLE:
             self._init_modules()
 
@@ -104,6 +111,14 @@ class LiveDataProvider:
             self._parser,
             self._store
         )
+        # ML 파이프라인 초기화
+        self._ml_pipeline = MLPipeline()
+        self._rule_detector = RuleDetector()  # 앙상블용 Rule 탐지기
+        # 기존 모델 로드 시도
+        if self._ml_pipeline.load():
+            logger.info("[ML] 저장된 모델 로드 완료")
+        else:
+            logger.info("[ML] 저장된 모델 없음, Rule 탐지만 활성화")
 
     # =========================================================================
     # 캡처 제어
@@ -326,6 +341,7 @@ class LiveDataProvider:
             **self._build_kpi_metrics(),
             **self._build_operational_info(),
             **self._build_ui_display_data(),
+            "ml": self._build_ml_data(),
         }
 
     def _build_connection_info(self) -> Dict:
@@ -433,3 +449,144 @@ class LiveDataProvider:
         if self._store:
             return self._store.record_count
         return 0
+
+    # =========================================================================
+    # ML 이상 탐지
+    # =========================================================================
+
+    def _build_ml_data(self) -> Dict:
+        """앙상블 이상 탐지 데이터 빌드.
+        
+        Rule-Based + ML 앙상블:
+        1. Rule 탐지는 항상 실행 (Cold Start 대응)
+        2. ML은 학습 완료 후 실행
+        3. 둘 중 하나라도 이상이면 최종 이상 판정
+        """
+        now = datetime.now()
+        
+        # 현재 통계 가져오기
+        if not self._store:
+            return {"model_status": "not_ready"}
+        
+        current_stats = self._get_current_stats_for_ml()
+        
+        # 레코드 히스토리 업데이트
+        self._update_ml_records(current_stats, now)
+        
+        # === Rule-Based 탐지 (항상 실행) ===
+        rule_result = None
+        if self._rule_detector:
+            rule_result = self._rule_detector.detect(current_stats)
+        
+        # === ML 탐지 (학습 후 실행) ===
+        ml_result = None
+        ml_ready = False
+        
+        if self._ml_pipeline:
+            if not self._ml_pipeline.is_ready:
+                # 학습 시도
+                stats_history = self._store.get_stats_history(limit=500)
+                if len(stats_history) >= 500:
+                    self._ml_pipeline.train(stats_history)
+                    logger.info("[ML] 자동 학습 완료, 앙상블 모드 활성화")
+                    ml_ready = True
+            else:
+                ml_ready = True
+            
+            if ml_ready:
+                ml_result = self._ml_pipeline.predict(current_stats)
+                self._update_ml_score_history(ml_result.anomaly_score, now)
+        
+        # === 앙상블 판정 ===
+        rule_anomaly = rule_result.is_anomaly if rule_result else False
+        ml_anomaly = ml_result.is_anomaly if ml_result else False
+        final_anomaly = rule_anomaly or ml_anomaly
+        
+        # 탐지 소스 결정
+        if rule_anomaly and ml_anomaly:
+            detection_source = "Both"
+        elif rule_anomaly:
+            detection_source = "Rule"
+        elif ml_anomaly:
+            detection_source = "ML"
+        else:
+            detection_source = None
+        
+        # 신뢰도 계산
+        if ml_result:
+            confidence = ml_result.confidence
+        elif final_anomaly:
+            confidence = 0.7  # Rule만 있을 때 기본 신뢰도
+        else:
+            confidence = 0.0
+        
+        # 기여 특성
+        contributing_features = []
+        if ml_result and ml_result.contributing_features:
+            contributing_features = [
+                {"name": f["name"], "z_score": f["z_score"]}
+                for f in ml_result.contributing_features
+            ]
+        elif rule_result and rule_result.violated_rules:
+            # Rule 위반을 기여 특성으로 변환
+            for rule in rule_result.violated_rules:
+                contributing_features.append({
+                    "name": rule,
+                    "z_score": 2.5,  # Rule 위반은 고정 z-score
+                })
+        
+        return {
+            "model_status": "ready" if ml_ready else "rule_only",
+            "is_anomaly": final_anomaly,
+            "anomaly_score": ml_result.anomaly_score if ml_result else (-0.5 if final_anomaly else 0.0),
+            "confidence": confidence,
+            "detection_source": detection_source,  # 새 필드: Rule/ML/Both
+            "rule_violated": rule_result.violated_rules if rule_result else [],
+            "contributing_features": contributing_features,
+            "records": self._ml_records[-100:],
+            "score_history": self._ml_score_history[-60:],
+        }
+
+    def _get_current_stats_for_ml(self) -> Dict:
+        """PacketStore에서 ML용 통계 추출."""
+        if not self._store:
+            return {}
+        
+        return {
+            "jitter_current": self._store.last_jitter or 0,
+            "jitter_p95": self._store.get_jitter_p95() or 0,
+            "pps": self._store.pps,
+            "loss_rate": self._store.packet_loss_rate,
+            # 추가 통계 (FeatureExtractor에서 계산)
+            "parse_success_rate": self._store.get_parse_success_rate(),
+            "checksum_fail_rate": self._store.get_checksum_fail_rate(),
+        }
+
+    def _update_ml_records(self, stats: Dict, now: datetime):
+        """3D 차트용 레코드 히스토리 업데이트."""
+        record = {
+            "timestamp": now.strftime("%H:%M:%S"),
+            "jitter_current": stats.get("jitter_current", 0),
+            "pps": stats.get("pps", 0),
+            "loss_rate": stats.get("loss_rate", 0),
+            "anomaly_score": 0,  # 추론 후 업데이트
+        }
+        self._ml_records.append(record)
+        # 최대 200개 유지
+        if len(self._ml_records) > 200:
+            self._ml_records = self._ml_records[-200:]
+
+    def _update_ml_score_history(self, score: float, now: datetime):
+        """타임라인용 점수 히스토리 업데이트."""
+        self._ml_score_history.append({
+            "timestamp": now.strftime("%H:%M:%S"),
+            "score": score,
+        })
+        # 최대 120개 유지
+        if len(self._ml_score_history) > 120:
+            self._ml_score_history = self._ml_score_history[-120:]
+        
+        # 레코드에 점수 반영
+        if self._ml_records:
+            self._ml_records[-1]["anomaly_score"] = score
+
