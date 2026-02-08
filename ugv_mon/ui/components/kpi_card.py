@@ -7,7 +7,7 @@ KPI Card Component for UGV-MON Dashboard.
 import dash_mantine_components as dmc
 from dash import html
 
-from ..styles import LABEL_SMALL, UNIT_SMALL, VALUE_LARGE
+from ...styles import LABEL_SMALL, UNIT_SMALL, VALUE_LARGE
 
 
 def create_kpi_card(

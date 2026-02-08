@@ -12,13 +12,9 @@ import numpy as np
 import tempfile
 from pathlib import Path
 
-from ugv_mon.analysis import (
-    FeatureExtractor,
-    FeatureVector,
-    MLAnomalyDetector,
-    AnomalyResult,
-    MLPipeline,
-)
+from ugv_mon.analysis.feature_extractor import FeatureExtractor, FeatureVector
+from ugv_mon.analysis.ml_anomaly_detector import MLAnomalyDetector, AnomalyResult
+from ugv_mon.analysis.ml_pipeline import MLPipeline
 
 
 class TestFeatureExtractor:

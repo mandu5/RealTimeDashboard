@@ -67,36 +67,46 @@
 │                        UGV-MON                               │
 ├─────────────────────────────────────────────────────────────┤
 │   [Capture Layer]                                            │
-│   └── PacketSniffer (Scapy) → PacketQueue → PacketProcessor  │
+│   └── PacketSniffer → PacketQueue → PacketProcessor          │
+├─────────────────────────────────────────────────────────────┤
+│   [Service Layer] ← NEW (SRP 패턴)                           │
+│   ├── CaptureService    (캡처 제어)                          │
+│   ├── StatsService      (통계 관리)                          │
+│   ├── MLService         (이상 탐지)                          │
+│   └── DashboardBuilder  (Dict 빌드)                          │
 ├─────────────────────────────────────────────────────────────┤
 │   [Data Layer]                                               │
-│   └── PacketStore (deque) ←→ LiveDataProvider (Facade)       │
-├─────────────────────────────────────────────────────────────┤
-│   [Analysis Layer]                                           │
-│   └── MLPipeline (Isolation Forest) + RuleDetector           │
+│   └── PacketStore (deque) ← 통합 저장소                      │
 ├─────────────────────────────────────────────────────────────┤
 │   [Presentation Layer]                                       │
-│   └── Dash App → Callbacks → UI Components (12개 패널)       │
+│   └── Dash App → Callbacks → UI (12개 패널)                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 데이터 흐름
+### 2.2 데이터 흐름 (단방향)
 
 ```text
-Sniffer → Queue → Processor(파싱) → Store
-                                      ↑
-               LiveDataProvider ──────┘
-               (Facade + Orchestrator)
-                     │
-                     └─→ Dict(25키) → Callbacks → UI
+Network → Sniffer → Queue → Processor → Store
+                                          │
+    ┌─────────────────────────────────────┘
+    ▼
+StatsService ← 통계 집계
+    │
+    ▼
+DashboardBuilder → Dict(25키)
+    │
+    ▼
+ServiceProvider → Callbacks → UI
 ```
 
-**LiveDataProvider 역할**:
+### 2.3 Service Layer 역할 분리
 
-1. 캡처 컴포넌트 초기화 및 생명주기 관리
-2. Processor 호출 (파싱은 Processor가 수행)
-3. 자체 상태/카운터 관리
-4. Store + 자체 데이터 조합하여 Dict(25키) 빌드
+| 서비스               | 역할                        |
+| -------------------- | --------------------------- |
+| **CaptureService**   | 캡처 시작/중지/방향전환     |
+| **StatsService**     | 통계 카운터/연결 타임아웃   |
+| **MLService**        | Rule+ML 앙상블 탐지         |
+| **DashboardBuilder** | Dict(25키) 빌드 (순수 함수) |
 
 ### 2.3 기술 스택
 
@@ -279,14 +289,16 @@ opus1/
 │   └── Final_Project_Report.md
 │
 └── ugv_mon/                  # 메인 패키지
-    ├── core/                 # 설정, 상수, 모델
-    ├── capture/              # 패킷 캡처
-    ├── parser/               # ICD 파싱
-    ├── data/                 # 저장소, Provider
+    ├── config.py             # 앱 설정 (패키지 루트)
+    ├── constants.py          # 상수 (패키지 루트)
+    ├── models.py             # 모델 (패키지 루트)
+    ├── pipeline/             # 데이터 수집 파이프라인
+    ├── store/                # 데이터 저장소
+    ├── services/             # 서비스 레이어
     ├── analysis/             # ML 이상 탐지
-    ├── components/           # UI 컴포넌트
-    ├── layouts/              # 레이아웃, 패널
-    └── callbacks/            # Dash 콜백
+    ├── ui/                   # UI 모듈 (components, layouts, charts)
+    ├── callbacks/            # Dash 콜백
+    └── mock/                 # ⚠️ DEV ONLY
 ```
 
 ---

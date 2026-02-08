@@ -18,8 +18,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from ..data.packet_store import PacketStore
-    from ..parser import ICDParser
+    from ..store.packet_store import PacketStore
+    from .icd_parser import ICDParser
     from .queue import PacketQueue
 
 
@@ -137,7 +137,7 @@ class PacketProcessor:
                 self._store.record_emergency(reasons)
 
         # PacketRecord 생성 및 저장
-        from ..data.packet_store import PacketRecord
+        from ..store.packet_store import PacketRecord
 
         record = PacketRecord(
             timestamp=capture_time,

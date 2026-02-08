@@ -14,24 +14,7 @@ def create_anomaly_timeline(
     scores: list[dict],
     threshold: float = -0.3,
 ) -> go.Figure:
-    """이상 점수 시계열 차트.
-
-    - 이상 점수 라인 (보라색)
-    - 임계값 점선 (빨간색)
-    - 이상 구간 빨간색 하이라이트
-
-    Args:
-        scores: [{\"timestamp\": str, \"score\": float}, ...]
-        threshold: 이상 판정 임계값 (기본 -0.3)
-
-    Returns:
-        go.Figure: Plotly 시계열 Figure
-
-    Example:
-        >>> scores = [{\"timestamp\": \"12:00:00\", \"score\": -0.1}, ...]
-        >>> fig = create_anomaly_timeline(scores, threshold=-0.3)
-        >>> fig.show()
-    """
+    """이상 점수 시계열 차트."""
     if not scores:
         return _create_empty_timeline()
 
@@ -40,7 +23,6 @@ def create_anomaly_timeline(
 
     fig = go.Figure()
 
-    # 이상 점수 라인 (면적 채우기)
     fig.add_trace(go.Scatter(
         x=timestamps,
         y=values,
@@ -52,7 +34,6 @@ def create_anomaly_timeline(
         hovertemplate="시간: %{x}<br>점수: %{y:.3f}<extra></extra>",
     ))
 
-    # 임계값 라인
     fig.add_hline(
         y=threshold,
         line_dash="dash",
@@ -63,7 +44,6 @@ def create_anomaly_timeline(
         annotation_font_color="#ef4444",
     )
 
-    # 이상 구간 하이라이트
     anomaly_regions = _find_anomaly_regions(timestamps, values, threshold)
     for start, end in anomaly_regions:
         fig.add_vrect(
@@ -74,7 +54,6 @@ def create_anomaly_timeline(
             layer="below",
         )
 
-    # 레이아웃
     fig.update_layout(
         title={
             "text": "Anomaly Score Timeline",
@@ -85,8 +64,8 @@ def create_anomaly_timeline(
             "title": "시간",
             "gridcolor": "#374151",
             "zerolinecolor": "#4b5563",
-            "nticks": 10,  # 최대 10개 레이블만 표시
-            "tickangle": -45,  # 45도 기울임
+            "nticks": 10,
+            "tickangle": -45,
         },
         yaxis={
             "title": "이상 점수",
@@ -98,7 +77,7 @@ def create_anomaly_timeline(
         plot_bgcolor="rgba(17, 24, 39, 0.8)",
         font={"color": "white", "size": 10},
         height=280,
-        margin={"l": 50, "r": 20, "t": 50, "b": 70},  # 하단 여백 증가
+        margin={"l": 50, "r": 20, "t": 50, "b": 70},
         showlegend=False,
     )
 
@@ -128,7 +107,6 @@ def _find_anomaly_regions(
             in_anomaly = False
             start = None
 
-    # 마지막 구간이 열려있으면 닫기
     if in_anomaly and start is not None:
         regions.append((start, timestamps[-1]))
 
@@ -163,21 +141,13 @@ def _create_empty_timeline() -> go.Figure:
 
 
 def create_confidence_gauge(confidence: float) -> go.Figure:
-    """이상 탐지 신뢰도 게이지 차트.
-
-    Args:
-        confidence: 신뢰도 (0 ~ 1)
-
-    Returns:
-        반원형 게이지 차트
-    """
-    # 색상 결정
+    """이상 탐지 신뢰도 게이지 차트."""
     if confidence < 0.3:
-        color = "#22c55e"  # 녹색 (정상)
+        color = "#22c55e"
     elif confidence < 0.7:
-        color = "#f59e0b"  # 노란색 (주의)
+        color = "#f59e0b"
     else:
-        color = "#ef4444"  # 빨간색 (이상)
+        color = "#ef4444"
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number",

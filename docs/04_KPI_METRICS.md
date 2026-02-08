@@ -39,7 +39,7 @@ BPF 필터를 통과한 패킷의 비율
 ### 계산 방법
 
 ```python
-# capture/stats.py에서 집계
+# services/stats_service.py에서 집계
 filter_pass = (filtered_packets / total_captured) * 100
 ```
 

@@ -10,7 +10,7 @@ from typing import Optional
 import dash_mantine_components as dmc
 from dash import dcc, html
 
-from ..styles import (
+from ...styles import (
     CARD_MARGIN,
     COLORS,
     PANEL_HEADER,

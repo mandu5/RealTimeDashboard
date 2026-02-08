@@ -6,11 +6,11 @@ from typing import Protocol
 from dash import Input, Output, State, html
 from dash.exceptions import PreventUpdate
 
-from ..components.device_grid import create_device_grid
-from ..components.kpi_card import create_kpi_cards_row
-from ..layouts.charts import create_availability_timeline, create_communication_chart
-from ..layouts.header import create_status_chips
-from ..layouts.panels import (
+from ..ui.components.device_grid import create_device_grid
+from ..ui.components.kpi_card import create_kpi_cards_row
+from ..ui.layouts.charts import create_availability_timeline, create_communication_chart
+from ..ui.layouts.header import create_status_chips
+from ..ui.layouts.panels import (
     create_connection_history_content,
     create_emergency_indicators,
     create_emergency_stats_content,
@@ -163,7 +163,7 @@ def _register_ui_callbacks(app, provider) -> None:
 
 def _register_ml_panel_callback(app) -> None:
     """ML 패널 업데이트 콜백."""
-    from ..layouts.ml_charts import (
+    from ..ui.layouts.ml_charts import (
         create_anomaly_3d_scatter,
         create_anomaly_timeline,
         create_confidence_gauge,

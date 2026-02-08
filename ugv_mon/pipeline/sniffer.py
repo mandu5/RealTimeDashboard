@@ -1,12 +1,15 @@
 """
 Scapy 기반 패킷 스니퍼.
+
+네트워크에서 UDP 패킷을 캡처하여 콜백으로 전달합니다.
+통계는 StatsService에서 관리합니다.
 """
 
 import logging
 import threading
 import warnings
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -18,20 +21,28 @@ except ImportError:
     SCAPY_AVAILABLE = False
     Packet = None
 
-from .stats import CaptureStats
-
 logger = logging.getLogger(__name__)
 
 
 class PacketSniffer:
-    """UDP 패킷 스니퍼."""
+    """UDP 패킷 스니퍼.
+
+    네트워크 인터페이스에서 특정 포트의 UDP 패킷을 캡처합니다.
+    캡처된 패킷은 (datetime, bytes) 튜플로 콜백에 전달됩니다.
+
+    Args:
+        interface: 네트워크 인터페이스 이름 (예: "lo", "eno2")
+        src_port: 소스 포트 필터
+        dst_port: 목적지 포트 필터
+        callback: 패킷 수신 시 호출될 콜백 (Tuple[datetime, bytes] 전달)
+    """
 
     def __init__(
         self,
         interface: str,
         src_port: int,
         dst_port: int,
-        callback: Callable[[bytes], None]
+        callback: Callable[[Tuple[datetime, bytes]], None]
     ):
         if not SCAPY_AVAILABLE:
             raise ImportError("Scapy is not installed. Run: pip install scapy")
@@ -43,7 +54,6 @@ class PacketSniffer:
         self._filter = f"udp and src port {src_port} and dst port {dst_port}"
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._stats = CaptureStats()
 
         logger.info(f"PacketSniffer initialized: {interface}, filter='{self._filter}'")
 
@@ -53,7 +63,6 @@ class PacketSniffer:
             return
 
         self._running = True
-        self._stats.reset()
         self._thread = threading.Thread(target=self._capture_loop, name="PacketSniffer", daemon=True)
         self._thread.start()
         logger.info(f"Sniffer started on '{self._interface}'")
@@ -69,10 +78,8 @@ class PacketSniffer:
         logger.info("Sniffer stopped")
 
     def is_running(self) -> bool:
+        """캡처 실행 중 여부."""
         return self._running
-
-    def get_stats(self) -> CaptureStats:
-        return self._stats
 
     def _capture_loop(self) -> None:
         """캡처 루프."""
@@ -98,17 +105,18 @@ class PacketSniffer:
         """패킷 처리."""
         try:
             if UDP in packet and Raw in packet:
-                capture_time = datetime.now()  # 캡처 시점 저장
+                capture_time = datetime.now()
                 raw_data = bytes(packet[Raw].load)
-                self._stats.record_packet(len(raw_data), filtered=True)
-                self._callback((capture_time, raw_data))  # 튜플로 전달
+                self._callback((capture_time, raw_data))
         except Exception as e:
             logger.warning(f"Packet processing error: {e}")
 
     @property
     def interface(self) -> str:
+        """네트워크 인터페이스."""
         return self._interface
 
     @property
     def filter_str(self) -> str:
+        """BPF 필터 문자열."""
         return self._filter

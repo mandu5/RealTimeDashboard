@@ -9,7 +9,7 @@ import dash_mantine_components as dmc
 from dash import html
 
 from ..components.status_chip import create_status_chip
-from ..styles import COLORS, HEADER_BAR, flex_row, indicator_bar
+from ...styles import COLORS, HEADER_BAR, flex_row, indicator_bar
 
 
 def create_header_bar(data: dict) -> html.Div:
