@@ -4,15 +4,15 @@ Header Bar Component for UGV-MON Dashboard.
 상단 헤더 바와 상태 칩들을 제공합니다.
 """
 
-from dash import html
-from typing import Dict, List
+
 import dash_mantine_components as dmc
+from dash import html
 
 from ..components.status_chip import create_status_chip
 from ..styles import COLORS, HEADER_BAR, flex_row, indicator_bar
 
 
-def create_header_bar(data: Dict) -> html.Div:
+def create_header_bar(data: dict) -> html.Div:
     """대시보드 헤더 바 생성."""
     return html.Div(
         children=[
@@ -46,7 +46,7 @@ def create_header_bar(data: Dict) -> html.Div:
     )
 
 
-def create_status_chips(data: Dict) -> list:
+def create_status_chips(data: dict) -> list:
     """헤더 상태 칩들 생성.
 
     연결 토글, 방향 전환, 마지막 패킷 시간을 표시합니다.

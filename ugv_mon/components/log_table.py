@@ -5,15 +5,15 @@ Implements the event log table using dash-ag-grid for
 high-performance scrolling and enterprise features.
 """
 
-from dash import html
+
 import dash_ag_grid as dag
-from typing import Dict, List
+from dash import html
 
 
-def get_log_column_defs() -> List[Dict]:
+def get_log_column_defs() -> list[dict]:
     """
     Get AG-Grid column definitions for the log table.
-    
+
     Returns:
         List of column definition dictionaries
     """
@@ -101,12 +101,12 @@ def get_log_column_defs() -> List[Dict]:
 
 
 def create_log_table(
-    row_data: List[Dict],
+    row_data: list[dict],
     table_id: str = "log-table"
 ) -> dag.AgGrid:
     """
     Create the AG-Grid log table component.
-    
+
     Displays packet log entries with columns:
     - Time: Packet timestamp (HH:MM:SS.mmm)
     - Seq: Sequence number from ICD
@@ -116,14 +116,14 @@ def create_log_table(
     - Mode: Current operation mode
     - Authority: Current authority holder
     - Notes: Anomaly notes (jitter, loss, etc.)
-    
+
     Args:
         row_data: List of log entry dictionaries
         table_id: Component ID for callbacks
-        
+
     Returns:
         AG-Grid component configured for log display
-        
+
     Example:
         >>> logs = [
         ...     {"time": "14:32:05.123", "seq": 49195, "msg_code": "0x01", ...},
@@ -174,15 +174,15 @@ def create_log_table(
 def create_log_table_header(log_count: int) -> html.Div:
     """
     Create the log table header with title and controls.
-    
+
     Args:
         log_count: Current number of log entries
-        
+
     Returns:
         Header div with title and control buttons
     """
     import dash_mantine_components as dmc
-    
+
     return html.Div(
         children=[
             # Title section
@@ -281,31 +281,31 @@ def create_log_table_header(log_count: int) -> html.Div:
     )
 
 
-def filter_logs(logs: List[Dict], msg_code_filter: str, status_filter: str, search_text: str) -> List[Dict]:
+def filter_logs(logs: list[dict], msg_code_filter: str, status_filter: str, search_text: str) -> list[dict]:
     """
     Filter log entries based on criteria.
-    
+
     Args:
         logs: List of log dictionaries
         msg_code_filter: 'all' or specific msg_code like '0x01'
         status_filter: 'all', 'success', or 'error'
         search_text: Text to search in all searchable fields
-        
+
     Returns:
         Filtered list of logs
     """
     filtered = logs
-    
+
     # Msg Code filter
     if msg_code_filter and msg_code_filter != "all":
         filtered = [log for log in filtered if log.get("msg_code", "") == msg_code_filter]
-    
+
     # Status filter
     if status_filter == "success":
         filtered = [log for log in filtered if log.get("parse_ok") == "✓" and log.get("checksum_ok") == "✓"]
     elif status_filter == "error":
         filtered = [log for log in filtered if log.get("parse_ok") == "✗" or log.get("checksum_ok") == "✗"]
-    
+
     # Search filter (전체 필드에서 검색)
     if search_text:
         search_lower = search_text.lower()
@@ -314,6 +314,6 @@ def filter_logs(logs: List[Dict], msg_code_filter: str, status_filter: str, sear
             log for log in filtered
             if any(search_lower in str(log.get(field, "")).lower() for field in searchable_fields)
         ]
-    
+
     return filtered
 

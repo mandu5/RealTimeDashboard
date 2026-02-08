@@ -7,34 +7,35 @@ Provides Plotly chart builders for:
 - Availability timeline (up/down segments)
 """
 
+from typing import Optional
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from typing import Dict, List
 
-from ..styles import get_chart_colors
 from ..core import config
+from ..styles import get_chart_colors
 
 
 def create_communication_chart(
-    data: List[Dict],
+    data: list[dict],
     p95: float,
     time_range_seconds: int = 60,
 ) -> go.Figure:
     """
     Create combined PPS + Jitter time series chart.
-    
+
     Displays two stacked charts:
     1. Top: Packets per second (PPS) - blue area chart
     2. Bottom: Jitter (ms) - green area chart with P95 reference line
-    
+
     Args:
         data: List of dictionaries with 'timestamp', 'pps', 'jitter' keys
         p95: Current P95 jitter value (ms)
         time_range_seconds: Time range to display in seconds (30, 60, or 300)
-        
+
     Returns:
         Plotly Figure object
-        
+
     Example:
         >>> data = [
         ...     {"timestamp": "14:32:05", "pps": 1024, "jitter": 1.5},
@@ -43,14 +44,14 @@ def create_communication_chart(
         >>> fig = create_communication_chart(data, 2.1, 60)
     """
     colors = get_chart_colors()
-    
+
     # Filter data based on time range (keep only last N points)
     # Assuming data points come every 1-2 seconds, calculate how many points to show
     # Average poll interval is ~2 seconds, so for 30s we need ~15 points, 60s ~30 points, 300s ~150 points
     points_per_second = 0.5  # Approximate: 1 point per 2 seconds
     max_points = int(time_range_seconds * points_per_second)
     filtered_data = data[-max_points:] if len(data) > max_points else data
-    
+
     fig = make_subplots(
         rows=2,
         cols=1,
@@ -58,12 +59,12 @@ def create_communication_chart(
         vertical_spacing=0.15,  # Increased spacing between subplots
         row_heights=[0.5, 0.5],
     )
-    
+
     # Extract data series from filtered data
     timestamps = [d.get("timestamp", "") for d in filtered_data]
     pps_values = [d.get("pps", 0) for d in filtered_data]
     jitter_values = [d.get("jitter", 0) for d in filtered_data]
-    
+
     # PPS Chart (top)
     fig.add_trace(
         go.Scatter(
@@ -71,7 +72,7 @@ def create_communication_chart(
             y=pps_values,
             mode="lines",
             name="PPS",
-            line=dict(color=colors["primary"], width=2),
+            line={"color": colors["primary"], "width": 2},
             fill="tozeroy",
             fillcolor=colors["fill_primary"],
             hovertemplate="PPS: %{y}<br>Time: %{x}<extra></extra>",
@@ -79,7 +80,7 @@ def create_communication_chart(
         row=1,
         col=1,
     )
-    
+
     # Jitter Chart (bottom)
     fig.add_trace(
         go.Scatter(
@@ -87,7 +88,7 @@ def create_communication_chart(
             y=jitter_values,
             mode="lines",
             name="Jitter",
-            line=dict(color=colors["secondary"], width=2),
+            line={"color": colors["secondary"], "width": 2},
             fill="tozeroy",
             fillcolor=colors["fill_secondary"],
             hovertemplate="Jitter: %{y}ms<br>Time: %{x}<extra></extra>",
@@ -95,7 +96,7 @@ def create_communication_chart(
         row=2,
         col=1,
     )
-    
+
     # P95 reference line
     fig.add_hline(
         y=p95,
@@ -106,7 +107,7 @@ def create_communication_chart(
         row=2,
         col=1,
     )
-    
+
     # Update axes styling - 루프로 통합
     if time_range_seconds <= 30:
         n_ticks = 4
@@ -114,50 +115,50 @@ def create_communication_chart(
         n_ticks = 5
     else:
         n_ticks = 6
-    
-    x_axis_style = dict(showgrid=True, gridwidth=1, gridcolor=colors["grid"], nticks=n_ticks, tickformat="%H:%M:%S", tickangle=0, title=None)
-    y_axis_style = dict(showgrid=True, gridwidth=1, gridcolor=colors["grid"], rangemode="normal")
-    
+
+    x_axis_style = {"showgrid": True, "gridwidth": 1, "gridcolor": colors["grid"], "nticks": n_ticks, "tickformat": "%H:%M:%S", "tickangle": 0, "title": None}
+    y_axis_style = {"showgrid": True, "gridwidth": 1, "gridcolor": colors["grid"], "rangemode": "normal"}
+
     for row in [1, 2]:
         fig.update_xaxes(**x_axis_style, row=row, col=1)
         fig.update_yaxes(**y_axis_style, row=row, col=1)
-    
+
     # Layout configuration
     fig.update_layout(
         height=400,
-        margin=dict(l=40, r=40, t=40, b=40),
+        margin={"l": 40, "r": 40, "t": 40, "b": 40},
         plot_bgcolor="white",
         paper_bgcolor="white",
-        font=dict(family="Inter, sans-serif", size=11),
+        font={"family": "Inter, sans-serif", "size": 11},
         showlegend=False,
         hovermode="x unified",
         dragmode=False,
     )
-    
+
     return fig
 
 
 def create_availability_timeline(
-    segments: List[Dict],
-    duration: int = None
+    segments: list[dict],
+    duration: Optional[int] = None
 ) -> go.Figure:
     """
     Create availability timeline visualization.
-    
+
     Displays up/down segments as colored horizontal bars:
     - Green: System up (available)
     - Red: System down (unavailable)
-    
+
     Args:
         segments: List of segment dictionaries with:
             - start: Start time in seconds
             - end: End time in seconds
             - status: 'up' or 'down'
         duration: Total timeline duration in seconds (default: from config)
-        
+
     Returns:
         Plotly Figure object
-        
+
     Example:
         >>> segments = [
         ...     {"start": 0, "end": 2700, "status": "up"},
@@ -168,11 +169,11 @@ def create_availability_timeline(
     """
     if duration is None:
         duration = config.ui.timeline_duration_sec
-        
+
     colors = get_chart_colors()
-    
+
     fig = go.Figure()
-    
+
     # Filter and validate segments
     valid_segments = []
     for seg in segments:
@@ -181,31 +182,31 @@ def create_availability_timeline(
         # Only add segments with valid duration
         if end > start and end > 0:
             valid_segments.append(seg)
-    
+
     # If no valid segments, create a default "up" segment for the entire duration
     if not valid_segments:
         valid_segments = [{"start": 0, "end": duration, "status": "up"}]
-    
+
     for seg in valid_segments:
         start = seg.get("start", 0)
         end = seg.get("end", 0)
         status = seg.get("status", "up")
         color = colors["up_segment"] if status == "up" else colors["down_segment"]
         segment_duration = end - start
-        
+
         # Create multiple points along the segment for better hover coverage
         # Generate intermediate points every ~50 seconds for better hover interaction
         num_points = max(2, int((end - start) / 50) + 1)
         x_points = [start + (end - start) * i / (num_points - 1) for i in range(num_points)]
         y_points = [0] * num_points
-        
+
         # Use Scatter with thick line and fill for better visibility
         fig.add_trace(
             go.Scatter(
                 x=x_points,
                 y=y_points,
                 mode="lines",
-                line=dict(color=color, width=40),  # 두꺼운 선으로 시각화
+                line={"color": color, "width": 40},  # 두꺼운 선으로 시각화
                 fill="tozeroy",
                 fillcolor=color,
                 hovertemplate=(
@@ -218,14 +219,14 @@ def create_availability_timeline(
                 showlegend=False,
             )
         )
-    
+
     # Add legend indicators
     fig.add_trace(
         go.Scatter(
             x=[None],
             y=[None],
             mode="markers",
-            marker=dict(size=10, color=colors["up_segment"]),
+            marker={"size": 10, "color": colors["up_segment"]},
             name="Up",
         )
     )
@@ -234,42 +235,42 @@ def create_availability_timeline(
             x=[None],
             y=[None],
             mode="markers",
-            marker=dict(size=10, color=colors["down_segment"]),
+            marker={"size": 10, "color": colors["down_segment"]},
             name="Down",
         )
     )
-    
+
     fig.update_layout(
         height=100,  # 차트 높이 증가
-        margin=dict(l=40, r=40, t=30, b=50),  # 하단 여백 증가 (b=50)로 X축 레이블 공간 확보
-        xaxis=dict(
-            title=dict(
-                text="Time (seconds)",
-                standoff=10,  # 레이블과 축 사이 간격
-            ),
-            range=[0, duration],
-            showgrid=True,
-            gridcolor=colors["grid"],
-        ),
-        yaxis=dict(
-            showticklabels=False,
-            range=[-0.3, 0.3],  # 좁은 범위로 선이 두껍게 보이도록
-            showgrid=False,
-            fixedrange=True,  # Y축 고정
-        ),
+        margin={"l": 40, "r": 40, "t": 30, "b": 50},  # 하단 여백 증가 (b=50)로 X축 레이블 공간 확보
+        xaxis={
+            "title": {
+                "text": "Time (seconds)",
+                "standoff": 10,  # 레이블과 축 사이 간격
+            },
+            "range": [0, duration],
+            "showgrid": True,
+            "gridcolor": colors["grid"],
+        },
+        yaxis={
+            "showticklabels": False,
+            "range": [-0.3, 0.3],  # 좁은 범위로 선이 두껍게 보이도록
+            "showgrid": False,
+            "fixedrange": True,  # Y축 고정
+        },
         plot_bgcolor="white",
         paper_bgcolor="white",
-        font=dict(family="Inter, sans-serif", size=11),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-        ),
+        font={"family": "Inter, sans-serif", "size": 11},
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "right",
+            "x": 1,
+        },
         dragmode=False,
     )
-    
+
     return fig
 
 

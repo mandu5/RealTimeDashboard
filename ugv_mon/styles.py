@@ -7,6 +7,7 @@ UGV-MON 공통 UI 스타일 정의.
 # =============================================================================
 # 색상 팔레트
 # =============================================================================
+from typing import Optional
 
 COLORS = {
     # 주요 색상
@@ -17,19 +18,19 @@ COLORS = {
     "warning": "#f59e0b",
     "error": "#ef4444",
     "purple": "#9333ea",
-    
+
     # 텍스트
     "text_dark": "#0f172a",
     "text_primary": "#1e293b",
     "text_secondary": "#334155",
     "text_muted": "#64748b",
-    
+
     # 배경
     "bg_page": "linear-gradient(to bottom right, #f8fafc, #f1f5f9)",
     "bg_card": "white",
     "border": "#e2e8f0",
     "border_light": "#e5e7eb",
-    
+
     # 상태별 배경 그라데이션
     "bg_success": "linear-gradient(to bottom right, #d1fae5, #a7f3d0)",
     "bg_info": "linear-gradient(to bottom right, #dbeafe, #bfdbfe)",
@@ -50,7 +51,7 @@ PANEL_HEADER = {
 }
 
 # 수직 인디케이터 바
-def indicator_bar(color: str = None) -> dict:
+def indicator_bar(color: Optional[str] = None) -> dict:
     return {
         "width": "4px",
         "height": "16px",
@@ -158,9 +159,9 @@ def status_box_style(bg_gradient: str, border_color: str) -> dict:
         "border": f"1px solid {border_color}",
     }
 
-def led_style(is_active: bool, custom_color: str = None) -> dict:
+def led_style(is_active: bool, custom_color: Optional[str] = None) -> dict:
     """LED 인디케이터 스타일.
-    
+
     Args:
         is_active: 활성 상태
         custom_color: 커스텀 색상 (None이면 기본 빨간색/회색)
@@ -174,7 +175,7 @@ def led_style(is_active: bool, custom_color: str = None) -> dict:
     else:
         color = "#cbd5e1"
         shadow = "none"
-    
+
     return {
         "width": "8px",
         "height": "8px",
