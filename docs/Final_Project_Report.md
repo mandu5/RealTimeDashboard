@@ -265,7 +265,7 @@ LED 스타일로 원인별 표시:
 
 ## 5. 프로젝트 구조
 
-```
+```text
 opus1/
 ├── run.py                    # 통합 진입점
 ├── requirements.txt          # 의존성
@@ -384,7 +384,7 @@ python3 -m pytest tests/ -v
 
 ### 브라우저 접속
 
-```
+```text
 http://localhost:8050
 ```
 
