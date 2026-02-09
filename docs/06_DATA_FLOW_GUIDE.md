@@ -46,9 +46,9 @@
 ### sniffer.py (`pipeline/sniffer.py`)
 
 ```python
-def _process_packet(self, packet):
-    raw_data = bytes(packet[Raw].load)
-    self._callback((datetime.now(), raw_data))  # Queue로 전달
+def _capture_loop(self):
+    # ...
+    self._callback((datetime.now(), raw_data))  # Queue.put()으로 전달
 ```
 
 **출력**: `Tuple[datetime, bytes]`
@@ -57,7 +57,7 @@ def _process_packet(self, packet):
 
 ```python
 class PacketQueue:
-    def push(self, packet: Tuple[datetime, bytes]):
+    def put(self, packet: Tuple[datetime, bytes]):
         self._queue.append(packet)
 ```
 
