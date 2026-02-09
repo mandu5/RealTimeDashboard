@@ -74,81 +74,109 @@ options:
 
 ## 프로젝트 구조
 
-```
+```text
 opus1/
 ├── run.py                    # 통합 진입점 (CLI 지원)
 ├── requirements.txt          # 의존성 목록
-├── test_capture_packets.py   # 캡처 통합 테스트
 │
 ├── tests/                    # 단위 테스트
-│   └── test_icd_parser.py
-│
-├── scripts/                  # 유틸리티 스크립트
-│   └── test_payload_parsing.py
-│
 ├── docs/                     # 문서
 │
 └── ugv_mon/                  # 메인 Python 패키지
     ├── app.py                # Dash 앱 팩토리
+    ├── config.py             # 앱 설정 (환경변수)
+    ├── constants.py          # 상수 정의
+    ├── models.py             # 데이터 모델 (Enum, ICD 파싱)
     ├── styles.py             # UI 스타일 상수
     │
-    ├── core/                 # 핵심 모듈 (설정, 상수, 모델)
-    │   ├── config.py
-    │   ├── constants.py
-    │   └── models.py         # 전체 데이터 모델 통합
+    ├── pipeline/             # 데이터 수집 파이프라인
+    │   ├── sniffer.py        # PacketSniffer (Scapy)
+    │   ├── queue.py          # PacketQueue (thread-safe)
+    │   ├── processor.py      # PacketProcessor (파싱+저장)
+    │   └── icd_parser.py     # ICDParser (ICD v1.0)
     │
-    ├── capture/              # 패킷 캡처 (Scapy)
-    │   ├── sniffer.py
-    │   ├── queue.py
-    │   ├── stats.py
-    │   └── packet_processor.py  # 처리 파이프라인
+    ├── store/                # 데이터 저장소
+    │   └── packet_store.py   # 통합 저장 (단일 deque)
     │
-    ├── parser/               # ICD v1.0 파싱
-    │   └── icd_parser.py
+    ├── services/             # 서비스 레이어
+    │   ├── capture_service.py    # 캡처 제어
+    │   ├── stats_service.py      # 통계/연결 상태
+    │   ├── ml_service.py         # ML 이상 탐지
+    │   ├── dashboard_builder.py  # Dict(25키) 빌드
+    │   └── service_provider.py   # 콜백 호환 브리지
     │
-    ├── data/                 # 데이터 저장 및 제공
-    │   ├── packet_store.py   # 통합 저장소 (단일 deque)
-    │   ├── types.py          # DashboardData TypedDict
-    │   ├── live_provider.py  # 실시간 데이터 제공자
-    │   └── mock_data.py      # Mock 데이터 생성기
+    ├── analysis/             # ML 이상 탐지
+    │   ├── ml_pipeline.py
+    │   ├── ml_anomaly_detector.py
+    │   ├── rule_detector.py
+    │   └── feature_extractor.py
     │
-    ├── components/           # UI 컴포넌트
-    │   ├── status_chip.py
-    │   ├── kpi_card.py
-    │   ├── device_grid.py
-    │   └── log_table.py
+    ├── ui/                   # UI 모듈
+    │   ├── components/       # 재사용 컴포넌트
+    │   │   ├── kpi_card.py
+    │   │   ├── device_grid.py
+    │   │   ├── status_chip.py
+    │   │   └── log_table.py
+    │   ├── layouts/          # 레이아웃
+    │   │   ├── main_layout.py
+    │   │   ├── header.py
+    │   │   ├── panels.py
+    │   │   ├── charts.py
+    │   │   └── ml_charts.py
+    │   └── ml/               # ML 시각화
+    │       ├── anomaly_3d.py
+    │       ├── anomaly_timeline.py
+    │       └── feature_importance.py
     │
-    ├── layouts/              # 레이아웃
-    │   ├── main_layout.py
-    │   ├── header.py
-    │   ├── panels.py         # 전체 패널 (단일 파일)
-    │   └── charts.py
+    ├── callbacks/            # Dash 콜백
+    │   └── update_callbacks.py
     │
-    └── callbacks/            # Dash 콜백
-        └── update_callbacks.py
+    └── mock/                 # ⚠️ 개발/테스트용
+        ├── mock_data.py
+        └── live_provider.py  # LEGACY (호환용)
 ```
 
 ## 아키텍처 (데이터 흐름)
 
+```mermaid
+graph TD
+    UDP((UDP Packet)) --> Sniffer[PacketSniffer]
+    Sniffer -->|Push| Queue[PacketQueue]
+    Queue -->|Pop| Processor[PacketProcessor]
+    Processor -->|Parse| Parser[ICDParser]
+    Processor -->|Store| Store[PacketStore]
+
+    subgraph "Service Layer (SRP)"
+        Store --> Stats[StatsService]
+        Store --> ML[MLService]
+        Store --> Builder[DashboardBuilder]
+    end
+
+    subgraph "Presentation Layer"
+        Builder -->|Dict| Provider[ServiceProvider]
+        Provider -->|Callback| DashApp[Dash UI]
+    end
 ```
-Network → Sniffer → Queue → PacketProcessor → PacketStore(deque) → LiveDataProvider → UI
-                              (파싱+저장)       (통계+이력)          (Dict 25키)
-```
+
+1. **Pipeline**: `Sniffer`가 패킷을 잡아 `Queue`에 넣고, `Processor`가 꺼내서 파싱 후 `Store`에 저장.
+2. **Service**: `StatsService`와 `MLService`가 `Store`의 데이터를 분석.
+3. **Presentation**: `DashApp`이 2초마다 `ServiceProvider`를 통해 분석된 데이터를 조회하여 UI 갱신.
+4. **Pipeline**: `Sniffer`가 패킷을 잡아 `Queue`에 넣고, `Processor`가 꺼내서 파싱 후 `Store`에 저장.
+5. **Service**: `StatsService`와 `MLService`가 `Store`의 데이터를 분석.
+6. **Presentation**: `DashApp`이 2초마다 `ServiceProvider`를 통해 분석된 데이터를 조회하여 UI 갱신.
 
 ## 테스트
 
-### 단위 테스트
+### 단위 테스트 실행
 
 ```bash
-pip install pytest
-python -m pytest tests/ -v
+pytest tests/
 ```
 
-### 통합 테스트 (패킷 캡처)
+### Mock 모드 실행 (UI 테스트)
 
 ```bash
-pip install scapy
-sudo python3 test_capture_packets.py
+python3 run.py
 ```
 
 ## 문서

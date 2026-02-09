@@ -19,3 +19,9 @@ DEVICE_NAMES: list[str] = ["VIC", "RDC", "ADC", "FCAM", "RCAM", "ACAM", "SCS", "
 ICD_HEADER_SIZE: int = 12            # 헤더 크기 (bytes)
 ICD_CHECKSUM_SIZE: int = 2           # 체크섬 크기 (bytes)
 ICD_MIN_PACKET_SIZE: int = ICD_HEADER_SIZE + ICD_CHECKSUM_SIZE
+
+# =============================================================================
+# Mock 데이터 상수
+# =============================================================================
+
+DEFAULT_INITIAL_SEQUENCE: int = 1000  # Mock 데이터 시작 시퀀스 번호
