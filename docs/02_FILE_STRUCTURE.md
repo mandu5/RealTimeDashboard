@@ -34,8 +34,7 @@ opus1/
     │  Data Storage
     │  ════════════════════════════════════════════════
     ├── store/                # 데이터 저장소
-    │   ├── packet_store.py   # 통합 저장소 (deque)
-    │   └── types.py          # DashboardData TypedDict
+    │   └── packet_store.py   # 통합 저장소 (deque)
     │
     │  ════════════════════════════════════════════════
     │  Service Layer
