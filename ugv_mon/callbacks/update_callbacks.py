@@ -14,6 +14,7 @@ from ..ui.layouts.panels import (
     create_connection_history_content,
     create_emergency_indicators,
     create_emergency_stats_content,
+    create_ml_analysis_panel,
     create_mode_transitions_content,
     create_operational_status_boxes,
 )
@@ -74,6 +75,7 @@ def _register_component_callback(app, provider) -> None:
             Output("connection-history-container", "children"),
             Output("mode-transitions-container", "children"),
             Output("emergency-stats-container", "children"),
+            Output("ml-analysis-container", "children"),
         ],
         Input("dashboard-data", "data"),
     )
@@ -103,6 +105,7 @@ def _register_component_callback(app, provider) -> None:
             create_connection_history_content(data),
             create_mode_transitions_content(data),
             create_emergency_stats_content(data),
+            create_ml_analysis_panel(data),
         )
 
 
@@ -179,6 +182,8 @@ def _register_ml_panel_callback(app) -> None:
     )
     def update_ml_panel(data):
         ml_data = data.get("ml", {})
+        if ml_data.get("model_status", "not_ready") == "not_ready":
+            raise PreventUpdate
         records = ml_data.get("records", [])
         score_history = ml_data.get("score_history", [])
         contributing_features = ml_data.get("contributing_features", [])
