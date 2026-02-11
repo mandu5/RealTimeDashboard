@@ -100,11 +100,6 @@ class ServiceProvider:
             return self._capture.toggle_direction()
 
     @property
-    def current_direction(self) -> str:
-        """현재 방향."""
-        return self._capture.direction
-
-    @property
     def _is_connected(self) -> bool:
         """연결 상태 (호환성)."""
         return self._capture.is_running
@@ -166,8 +161,3 @@ class ServiceProvider:
         self._store.reset()
         self._stats.reset()
         self._ml.reset()
-
-    @property
-    def log_count(self) -> int:
-        """로그 수."""
-        return self._store.record_count

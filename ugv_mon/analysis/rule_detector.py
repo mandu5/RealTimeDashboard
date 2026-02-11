@@ -101,12 +101,3 @@ class RuleDetector:
             violated_rules=violated,
             details=details,
         )
-
-    @property
-    def thresholds(self) -> dict[str, float]:
-        """현재 임계값."""
-        return self._thresholds.copy()
-
-    def update_thresholds(self, new_thresholds: dict[str, float]) -> None:
-        """임계값 업데이트."""
-        self._thresholds.update(new_thresholds)

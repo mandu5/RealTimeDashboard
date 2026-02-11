@@ -120,7 +120,7 @@
 - **역할**: `BatchProcessResult` 집계, 파싱률/체크섬률 계산, 5초 타임아웃 기반 연결 상태 판단
 - **입력**: `BatchProcessResult` (processor에서)
 - **출력**: `get_parse_rate()`, `get_checksum_fail_rate()`, `is_connected()`, `last_packet_time_str`, `last_payload`
-- **주요 클래스**: `StatsService`, `StatsSnapshot`
+- **주요 클래스**: `StatsService`
 
 ### `ugv_mon/services/ml_service.py` — **7단계**
 - **역할**: Rule + ML 앙상블 이상 탐지. `PacketStore`에서 통계 추출 → `MLPipeline`/`RuleDetector` 호출
@@ -210,7 +210,7 @@
 
 ### `ugv_mon/ui/components/log_table.py`
 - **역할**: AG-Grid 기반 로그 테이블 (timestamp, sequence, msg_code, parse_ok, checksum_ok, mode, authority, error)
-- **주요 함수**: `get_log_column_defs()`, `create_log_table()`, `create_log_table_header()`, `filter_logs()`
+- **주요 함수**: `get_log_column_defs()`, `create_log_table()`, `create_log_table_header()`
 
 ### `ugv_mon/ui/ml/anomaly_3d.py`
 - **역할**: 3D 이상 탐지 산점도 (지터, PPS, 손실률)
