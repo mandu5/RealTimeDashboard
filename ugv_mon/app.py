@@ -6,7 +6,7 @@ Dash 앱 인스턴스를 생성하고 설정합니다.
 
 모드 전환:
 - Mock 모드: 환경변수 없이 실행 → MockDataGenerator 사용
-- Live 모드: UGV_MON_USE_LIVE=true → LiveDataProvider + PacketSniffer 사용
+- Live 모드: UGV_MON_USE_LIVE=true → ServiceProvider + 패킷 캡처 사용
 
 Q: Mock과 Live의 차이점은?
 A: Mock은 가짜 랜덤 데이터, Live는 실제 네트워크 패킷 캡처
@@ -33,7 +33,7 @@ def create_app() -> dash.Dash:
 
     환경변수에 따라 Mock 또는 Live 모드로 초기화합니다:
     - Mock 모드: MockDataGenerator (기본값)
-    - Live 모드: LiveDataProvider + 패킷 캡처 시작
+    - Live 모드: ServiceProvider + 패킷 캡처 시작
 
     Returns:
         설정된 Dash 앱 인스턴스

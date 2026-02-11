@@ -7,6 +7,8 @@ Z-score 기반으로 각 특성의 정상 범위 이탈 정도를 보여줍니�
 
 import plotly.graph_objects as go
 
+from ._empty_chart import ML_CHART_HEIGHT_FEATURE, create_empty_ml_chart
+
 
 def create_feature_contribution_chart(
     contributing_features: list[dict],
@@ -14,7 +16,27 @@ def create_feature_contribution_chart(
 ) -> go.Figure:
     """기여 특성 수평 바 차트."""
     if not contributing_features:
-        return _create_empty_chart()
+        return create_empty_ml_chart(
+            "이상 기여 특성 (정상 상태)",
+            "✅ 현재 모든 특성이 정상 범위입니다",
+            {
+                "xaxis": {"title": "Z-Score", "range": [0, 5], "showgrid": False, "showticklabels": False},
+                "yaxis": {"title": "", "showgrid": False, "showticklabels": False},
+                "height": ML_CHART_HEIGHT_FEATURE,
+                "margin": {"l": 40, "r": 40, "t": 50, "b": 40},
+                "annotations": [
+                    {
+                        "text": "✅ 현재 모든 특성이 정상 범위입니다",
+                        "showarrow": False,
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x": 0.5,
+                        "y": 0.5,
+                        "font": {"color": "#22c55e", "size": 16, "family": "Arial"},
+                    }
+                ],
+            },
+        )
 
     features = contributing_features[:max_features]
 
@@ -63,7 +85,7 @@ def create_feature_contribution_chart(
         paper_bgcolor="rgba(17, 24, 39, 1)",
         plot_bgcolor="rgba(17, 24, 39, 0.8)",
         font={"color": "white"},
-        height=220,
+        height=ML_CHART_HEIGHT_FEATURE,
         margin={"l": 120, "r": 60, "t": 50, "b": 40},
         showlegend=False,
     )
@@ -81,37 +103,3 @@ def create_feature_contribution_chart(
     return fig
 
 
-def _create_empty_chart() -> go.Figure:
-    """기여 특성 없을 때 빈 차트."""
-    fig = go.Figure()
-    fig.update_layout(
-        title="이상 기여 특성 (정상 상태)",
-        xaxis={
-            "title": "Z-Score",
-            "range": [0, 5],
-            "showgrid": False,
-            "showticklabels": False,
-        },
-        yaxis={
-            "title": "",
-            "showgrid": False,
-            "showticklabels": False,
-        },
-        paper_bgcolor="rgba(17, 24, 39, 1)",
-        plot_bgcolor="rgba(17, 24, 39, 0.8)",
-        font={"color": "white"},
-        height=220,
-        margin={"l": 40, "r": 40, "t": 50, "b": 40},
-        annotations=[
-            {
-                "text": "✅ 현재 모든 특성이 정상 범위입니다",
-                "showarrow": False,
-                "xref": "paper",
-                "yref": "paper",
-                "x": 0.5,
-                "y": 0.5,
-                "font": {"color": "#22c55e", "size": 16, "family": "Arial"},
-            }
-        ],
-    )
-    return fig

@@ -9,6 +9,8 @@ from typing import Optional
 
 import plotly.graph_objects as go
 
+from ._empty_chart import ML_CHART_HEIGHT_TIMELINE, create_empty_ml_chart
+
 
 def create_anomaly_timeline(
     scores: list[dict],
@@ -16,7 +18,16 @@ def create_anomaly_timeline(
 ) -> go.Figure:
     """이상 점수 시계열 차트."""
     if not scores:
-        return _create_empty_timeline()
+        return create_empty_ml_chart(
+            "Anomaly Score Timeline (데이터 없음)",
+            "ML 모델 학습 후 표시됩니다",
+            {
+                "xaxis": {"title": "시간", "nticks": 10},
+                "yaxis": {"title": "이상 점수", "range": [-1, 0.5]},
+                "height": ML_CHART_HEIGHT_TIMELINE,
+                "margin": {"l": 50, "r": 20, "t": 50, "b": 70},
+            },
+        )
 
     timestamps = [s["timestamp"] for s in scores]
     values = [s["score"] for s in scores]
@@ -76,7 +87,7 @@ def create_anomaly_timeline(
         paper_bgcolor="rgba(17, 24, 39, 1)",
         plot_bgcolor="rgba(17, 24, 39, 0.8)",
         font={"color": "white", "size": 10},
-        height=280,
+        height=ML_CHART_HEIGHT_TIMELINE,
         margin={"l": 50, "r": 20, "t": 50, "b": 70},
         showlegend=False,
     )
@@ -113,31 +124,6 @@ def _find_anomaly_regions(
     return regions
 
 
-def _create_empty_timeline() -> go.Figure:
-    """데이터 없을 때 빈 타임라인."""
-    fig = go.Figure()
-    fig.update_layout(
-        title="Anomaly Score Timeline (데이터 없음)",
-        xaxis={"title": "시간", "nticks": 10},
-        yaxis={"title": "이상 점수", "range": [-1, 0.5]},
-        paper_bgcolor="rgba(17, 24, 39, 1)",
-        plot_bgcolor="rgba(17, 24, 39, 0.8)",
-        font={"color": "white", "size": 10},
-        height=280,
-        margin={"l": 50, "r": 20, "t": 50, "b": 70},
-        annotations=[
-            {
-                "text": "ML 모델 학습 후 표시됩니다",
-                "showarrow": False,
-                "xref": "paper",
-                "yref": "paper",
-                "x": 0.5,
-                "y": 0.5,
-                "font": {"color": "#9ca3af"},
-            }
-        ],
-    )
-    return fig
 
 
 def create_confidence_gauge(confidence: float) -> go.Figure:

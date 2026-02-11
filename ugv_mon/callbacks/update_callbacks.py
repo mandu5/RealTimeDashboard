@@ -6,6 +6,7 @@ from typing import Protocol
 from dash import Input, Output, State, html
 from dash.exceptions import PreventUpdate
 
+from ..config import config
 from ..ui.components.device_grid import create_device_grid
 from ..ui.components.kpi_card import create_kpi_cards_row
 from ..ui.layouts.charts import create_communication_chart
@@ -23,7 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class DataProviderProtocol(Protocol):
-    """데이터 제공자 인터페이스."""
+    """데이터 제공자 인터페이스.
+
+    콜백에서 사용. provider._is_connected 속성으로 연결 상태 조회.
+    """
     def update_data(self, prev_data: dict) -> dict: ...
     def clear_logs(self) -> None: ...
 
@@ -71,7 +75,7 @@ def _register_component_callback(app, provider) -> None:
             Output("connection-toggle-btn", "children"),
             Output("connection-toggle-btn", "variant"),
             Output("connection-toggle-btn", "color"),
-            # Phase 4-6: 신규 패널 업데이트
+            # 연결 이력, 모드 전이, 비상정지 통계 패널
             Output("connection-history-container", "children"),
             Output("mode-transitions-container", "children"),
             Output("emergency-stats-container", "children"),
@@ -95,13 +99,13 @@ def _register_component_callback(app, provider) -> None:
             create_operational_status_boxes(data),
             create_emergency_indicators(data.get("emergencyStatus", {})),
             create_device_grid(data.get("devices", [])),
-            create_communication_chart(chart_data, data.get("jitterP95", 0), 60),
+            create_communication_chart(chart_data, data.get("jitterP95", 0), config.ui.chart_time_range_sec),
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
             btn_children,
             "filled" if is_conn else "outline",
             "green" if is_conn else "red",
-            # Phase 4-6: 신규 패널 컨텐츠
+            # 연결 이력, 모드 전이, 비상정지 컨텐츠
             create_connection_history_content(data),
             create_mode_transitions_content(data),
             create_emergency_stats_content(data),

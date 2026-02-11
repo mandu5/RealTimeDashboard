@@ -5,11 +5,12 @@ UGV-MON 대시보드 패널 모듈.
 main_layout.py와 update_callbacks.py에서 import하여 사용합니다.
 """
 
-from typing import Optional
+from typing import Callable, Optional
 
 import dash_mantine_components as dmc
 from dash import dcc, html
 
+from ...config import config
 from ...styles import (
     CARD_MARGIN,
     COLORS,
@@ -53,6 +54,61 @@ def panel_header_inline(title: str) -> html.Div:
     )
 
 
+def _create_content_card(
+    title: str,
+    content,
+    container_id: str,
+    *,
+    header_color: Optional[str] = None,
+    card_margin: bool = True,
+    content_style: Optional[dict] = None,
+) -> dmc.Card:
+    """패널 카드 공통 구조 (헤더 + 컨테이너).
+
+    Args:
+        title: 패널 제목
+        content: 컨테이너 children (단일 요소 또는 리스트)
+        container_id: html.Div id (콜백 Output용)
+        header_color: 헤더 인디케이터 색상 (선택)
+        card_margin: CARD_MARGIN 적용 여부
+        content_style: 컨테이너 div 스타일 (선택)
+    """
+    container_style = content_style or {}
+    return dmc.Card(
+        children=[
+            panel_header(title, header_color),
+            html.Div(id=container_id, children=content, style=container_style),
+        ],
+        withBorder=True, p="lg", radius="md", style=CARD_MARGIN if card_margin else {},
+    )
+
+
+# 이력/전이 패널 표시 개수
+HISTORY_DISPLAY_LIMIT = 5
+
+# 운용 상태 박스별 스타일 (create_operational_status_boxes에서 사용)
+STATUS_STYLES = {
+    "mode": {
+        "label_color": COLORS["success_dark"],
+        "value_color": "#064e3b",
+        "bg": COLORS["bg_success"],
+        "border": "#a7f3d0",
+    },
+    "authority": {
+        "label_color": COLORS["primary"],
+        "value_color": COLORS["primary_dark"],
+        "bg": COLORS["bg_info"],
+        "border": "#bfdbfe",
+    },
+    "driving": {
+        "label_color": COLORS["text_muted"],
+        "value_color": COLORS["text_dark"],
+        "bg": COLORS["bg_neutral"],
+        "border": COLORS["border"],
+    },
+}
+
+
 def _format_iso_timestamp(iso_str: str) -> str:
     """ISO 8601 타임스탬프에서 'T' 구분자를 공백으로 변환.
 
@@ -65,48 +121,45 @@ def _format_iso_timestamp(iso_str: str) -> str:
     return iso_str[:19].replace("T", " ") if iso_str else ""
 
 
+def _build_list_content(
+    items: list,
+    empty_msg: str,
+    row_builder: Callable,
+    limit: int = HISTORY_DISPLAY_LIMIT,
+) -> list:
+    """이력/전이 패널용 리스트 컨텐츠 빌드.
+
+    Args:
+        items: 원본 리스트
+        empty_msg: 빈 데이터 시 메시지
+        row_builder: item -> dmc.Group 등 (단일 행 생성 함수)
+        limit: 표시할 최대 개수
+
+    Returns:
+        dmc.Stack로 감싼 rows 또는 빈 메시지
+    """
+    if not items:
+        return [dmc.Text(empty_msg, c="dimmed", size="sm")]
+    rows = [row_builder(item) for item in reversed(items[-limit:])]
+    return [dmc.Stack(rows, spacing="xs")]
+
+
 # =============================================================================
 # 1. 운용 상태 패널
 # =============================================================================
 
 def create_operational_status_panel(data: dict) -> dmc.Card:
     """운용 상태 패널 (운용모드 / 권한 / 주행상태 3개 박스)."""
-    return dmc.Card(
-        children=[
-            panel_header("현재 운용 상태"),
-            html.Div(
-                id="operational-status",
-                children=create_operational_status_boxes(data),
-                style={"display": "flex", "flexDirection": "column", "gap": "16px"},
-            ),
-        ],
-        withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
+    return _create_content_card(
+        "현재 운용 상태",
+        create_operational_status_boxes(data),
+        "operational-status",
+        content_style={"display": "flex", "flexDirection": "column", "gap": "16px"},
     )
 
 
 def create_operational_status_boxes(data: dict) -> list:
     """운용 상태 3개 박스 생성."""
-    STATUS_STYLES = {
-        "mode": {
-            "label_color": COLORS["success_dark"],
-            "value_color": "#064e3b",
-            "bg": COLORS["bg_success"],
-            "border": "#a7f3d0",
-        },
-        "authority": {
-            "label_color": COLORS["primary"],
-            "value_color": COLORS["primary_dark"],
-            "bg": COLORS["bg_info"],
-            "border": "#bfdbfe",
-        },
-        "driving": {
-            "label_color": COLORS["text_muted"],
-            "value_color": COLORS["text_dark"],
-            "bg": COLORS["bg_neutral"],
-            "border": COLORS["border"],
-        },
-    }
-
     configs = [
         ("운용모드", data.get("operationalMode", "---"), STATUS_STYLES["mode"]),
         ("운용권한", data.get("operationalAuthority", "---"), STATUS_STYLES["authority"]),
@@ -141,16 +194,13 @@ def _status_box(
 
 def create_emergency_status_panel(emergency_status: dict[str, bool]) -> dmc.Card:
     """비상정지 원인 패널 (LED 인디케이터)."""
-    return dmc.Card(
-        children=[
-            panel_header("비상정지/이상 원인", COLORS["warning"]),
-            html.Div(
-                id="emergency-status",
-                children=create_emergency_indicators(emergency_status),
-                style={"display": "flex", "flexDirection": "column", "gap": "6px"},
-            ),
-        ],
-        withBorder=True, p="lg", radius="md",
+    return _create_content_card(
+        "비상정지/이상 원인",
+        create_emergency_indicators(emergency_status),
+        "emergency-status",
+        header_color=COLORS["warning"],
+        card_margin=False,
+        content_style={"display": "flex", "flexDirection": "column", "gap": "6px"},
     )
 
 
@@ -249,8 +299,8 @@ def create_charts_panel(data: dict) -> dmc.Card:
             _chart_header(),
             dcc.Graph(
                 id="comm-quality-chart",
-                figure=create_communication_chart(
-                    chart_data, data.get("jitterP95", 0), 60,
+                figure=            create_communication_chart(
+                    chart_data, data.get("jitterP95", 0), config.ui.chart_time_range_sec,
                 ),
                 config={"displayModeBar": False, "staticPlot": False, "doubleClick": False},
             ),
@@ -365,99 +415,82 @@ def create_log_panel(logs: list) -> dmc.Card:
 
 
 # =============================================================================
-# 7. 연결 이력 패널
+# 6. 연결 이력 패널
 # =============================================================================
 
 def create_connection_history_panel(data: dict) -> dmc.Card:
     """연결 상태 변경 이력 패널."""
-    return dmc.Card(
-        children=[
-            panel_header("연결 이력"),
-            html.Div(
-                id="connection-history-container",
-                children=create_connection_history_content(data),
-            ),
-        ],
-        withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
+    return _create_content_card(
+        "연결 이력",
+        create_connection_history_content(data),
+        "connection-history-container",
     )
+
+
+def _connection_history_row(item: dict) -> dmc.Group:
+    """연결 이력 단일 행."""
+    status = "연결" if item.get("connected") else "끊김"
+    color = "green" if item.get("connected") else "red"
+    duration = item.get("duration")
+    duration_str = f"({duration:.0f}초)" if duration else ""
+    return dmc.Group([
+        dmc.Badge(status, color=color, size="sm"),
+        dmc.Text(_format_iso_timestamp(item.get("timestamp", "")), size="xs", c="dimmed"),
+        dmc.Text(duration_str, size="xs", c="dimmed"),
+    ], spacing="xs")
 
 
 def create_connection_history_content(data: dict) -> list:
     """연결 이력 컨텐츠 (콜백에서도 사용)."""
-    history = data.get("connectionHistory", [])
-
-    if not history:
-        return [dmc.Text("연결 이력 없음", c="dimmed", size="sm")]
-
-    rows = []
-    for item in reversed(history[-5:]):
-        status = "연결" if item.get("connected") else "끊김"
-        color = "green" if item.get("connected") else "red"
-        duration = item.get("duration")
-        duration_str = f"({duration:.0f}초)" if duration else ""
-        rows.append(
-            dmc.Group([
-                dmc.Badge(status, color=color, size="sm"),
-                dmc.Text(_format_iso_timestamp(item.get("timestamp", "")), size="xs", c="dimmed"),
-                dmc.Text(duration_str, size="xs", c="dimmed"),
-            ], spacing="xs")
-        )
-    return [dmc.Stack(rows, spacing="xs")]
+    return _build_list_content(
+        data.get("connectionHistory", []),
+        "연결 이력 없음",
+        _connection_history_row,
+    )
 
 
 # =============================================================================
-# 9. 운용모드 전이 패널
+# 7. 운용모드 전이 패널
 # =============================================================================
 
 def create_mode_transitions_panel(data: dict) -> dmc.Card:
     """운용 모드 전이 이력 패널."""
-    return dmc.Card(
-        children=[
-            panel_header("운용모드 전이"),
-            html.Div(
-                id="mode-transitions-container",
-                children=create_mode_transitions_content(data),
-            ),
-        ],
-        withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
+    return _create_content_card(
+        "운용모드 전이",
+        create_mode_transitions_content(data),
+        "mode-transitions-container",
     )
+
+
+def _mode_transition_row(t: dict) -> dmc.Group:
+    """모드 전이 단일 행."""
+    return dmc.Group([
+        dmc.Text(t.get("from", "?"), size="sm", fw=500),
+        dmc.Text("->", size="sm", c="dimmed"),
+        dmc.Text(t.get("to", "?"), size="sm", fw=500),
+        dmc.Text(_format_iso_timestamp(t.get("timestamp", "")), size="xs", c="dimmed"),
+    ], spacing="xs")
 
 
 def create_mode_transitions_content(data: dict) -> list:
     """운용모드 전이 컨텐츠 (콜백에서도 사용)."""
-    transitions = data.get("modeTransitions", [])
-
-    if not transitions:
-        return [dmc.Text("모드 전이 없음", c="dimmed", size="sm")]
-
-    rows = []
-    for t in reversed(transitions[-5:]):
-        rows.append(
-            dmc.Group([
-                dmc.Text(t.get("from", "?"), size="sm", fw=500),
-                dmc.Text("->", size="sm", c="dimmed"),
-                dmc.Text(t.get("to", "?"), size="sm", fw=500),
-                dmc.Text(_format_iso_timestamp(t.get("timestamp", "")), size="xs", c="dimmed"),
-            ], spacing="xs")
-        )
-    return [dmc.Stack(rows, spacing="xs")]
+    return _build_list_content(
+        data.get("modeTransitions", []),
+        "모드 전이 없음",
+        _mode_transition_row,
+    )
 
 
 # =============================================================================
-# 10. 비상정지 원인 통계 패널
+# 8. 비상정지 원인 통계 패널
 # =============================================================================
 
 def create_emergency_stats_panel(data: dict) -> dmc.Card:
     """비상정지 원인별 발생 횟수 패널."""
-    return dmc.Card(
-        children=[
-            panel_header("비상정지 원인 통계"),
-            html.Div(
-                id="emergency-stats-container",
-                children=create_emergency_stats_content(data),
-            ),
-        ],
-        withBorder=True, p="lg", radius="md", style=CARD_MARGIN,
+    return _create_content_card(
+        "비상정지 원인 통계",
+        create_emergency_stats_content(data),
+        "emergency-stats-container",
     )
 
 
@@ -470,7 +503,7 @@ def create_emergency_stats_content(data: dict) -> list:
 
     sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
     rows = []
-    for reason, count in sorted_items[:5]:
+    for reason, count in sorted_items[:HISTORY_DISPLAY_LIMIT]:
         rows.append(
             dmc.Group(
                 [
@@ -484,7 +517,7 @@ def create_emergency_stats_content(data: dict) -> list:
 
 
 # =============================================================================
-# Section 8: ML 이상 탐지 패널
+# 9. ML 이상 탐지 패널
 # =============================================================================
 
 def create_ml_analysis_panel(data: dict) -> dmc.Card:

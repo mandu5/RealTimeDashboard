@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 class ServiceProvider:
     """서비스 통합 제공자.
 
-    기존 LiveDataProvider와 동일한 인터페이스를 제공하면서
+    DataProviderProtocol 인터페이스를 구현하면서
     내부적으로 분리된 서비스들을 사용합니다.
 
     Args:

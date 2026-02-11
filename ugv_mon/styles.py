@@ -95,10 +95,10 @@ TWO_COLUMN_GRID = {
     "marginBottom": "24px",
 }
 
-# 8개 컬럼 그리드 (KPI 카드)
+# 7개 컬럼 그리드 (KPI 카드)
 KPI_GRID = {
     "display": "grid",
-    "gridTemplateColumns": "repeat(8, 1fr)",
+    "gridTemplateColumns": "repeat(7, 1fr)",
     "gap": "16px",
     "marginBottom": "24px",
 }

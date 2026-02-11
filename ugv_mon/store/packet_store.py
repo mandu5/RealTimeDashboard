@@ -7,10 +7,11 @@
 데이터 흐름:
     PacketProcessor → PacketStore.add() → deque[PacketRecord]
                                               │
-                                              ├── get_stats_dict()  → 통계
-                                              ├── get_logs()        → 로그 UI
-                                              ├── get_chart_data()  → 차트 UI
-                                              └── get_history()     → 이력 UI
+                                              ├── get_stats_dict()         → 통계
+                                              ├── get_logs()               → 로그 UI
+                                              ├── get_chart_data()         → 차트 UI
+                                              ├── get_connection_history() → 연결 이력
+                                              └── get_mode_transitions()   → 모드 전이
 
 기존 모듈 대체:
     - stats_calculator.py의 통계 계산 기능

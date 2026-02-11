@@ -88,9 +88,9 @@ def _create_main_content(data: dict) -> html.Div:
                 children=[
                     create_operational_status_panel(data),
                     create_emergency_status_panel(data.get("emergencyStatus", {})),
-                    create_emergency_stats_panel(data),  # Phase 6
-                    create_mode_transitions_panel(data),  # Phase 5
-                    create_connection_history_panel(data),  # Phase 4
+                    create_emergency_stats_panel(data),
+                    create_mode_transitions_panel(data),
+                    create_connection_history_panel(data),
                 ],
                 style=FLEX_COLUMN,
             ),
