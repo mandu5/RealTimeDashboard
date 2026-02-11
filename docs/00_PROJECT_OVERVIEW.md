@@ -51,12 +51,11 @@ sudo python3 run.py --mode live --interface lo
 sudo python3 run.py --mode live --interface eno2
 ```
 
-## 주요 KPI (8개)
+## 주요 KPI (7개)
 
 | KPI           | 설명                | 소스                             |
 | ------------- | ------------------- | -------------------------------- |
 | 수신 PPS      | 초당 패킷 수        | `PacketStore.get_pps()`          |
-| 필터 통과율   | BPF 필터 통과 비율  | 캡처 통계                        |
 | 파싱 성공률   | ICD 파싱 성공 비율  | `PacketStore` 집계               |
 | 체크섬 오류율 | 무결성 검증 실패    | `PacketStore` 집계               |
 | 패킷 손실     | 시퀀스 갭 기반 추정 | `PacketStore.get_packet_loss()`  |
@@ -64,17 +63,16 @@ sudo python3 run.py --mode live --interface eno2
 | 지터 (현재)   | 현재 패킷 간격 변동 | `PacketStore` 계산               |
 | 지터 (P95)    | 95번째 백분위 지터  | `PacketStore.get_jitter_p95()`   |
 
-## UI 패널 구성 (12개)
+## UI 패널 구성 (11개)
 
 | 패널                | 설명                        |
 | ------------------- | --------------------------- |
 | 헤더 바             | 연결 상태, 방향 전환 버튼   |
-| KPI 카드            | 8개 지표 그리드             |
+| KPI 카드            | 7개 지표 그리드             |
 | 운용 상태           | 모드/권한/주행상태          |
 | 비상정지 인디케이터 | LED 스타일 표시             |
 | 장치 연결 상태      | 5x2 그리드                  |
 | 통신 품질 차트      | PPS + 지터 듀얼 Y축         |
-| 가용성 타임라인     | 연결/끊김 구간 표시         |
 | ML 이상 탐지        | 3D 산점도, 타임라인, 게이지 |
 | 연결 이력           | 연결/끊김 시점 로그         |
 | 모드 전이           | 운용모드 변경 이력          |

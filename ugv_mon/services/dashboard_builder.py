@@ -51,7 +51,6 @@ class DashboardBuilder:
         filter_str: str,
         interface: str,
         ml_data: dict,
-        availability_segments: Optional[list] = None,
     ) -> dict:
         """대시보드 데이터 빌드 (25키).
 
@@ -61,7 +60,6 @@ class DashboardBuilder:
             filter_str: BPF 필터 문자열
             interface: 네트워크 인터페이스
             ml_data: ML 서비스 결과
-            availability_segments: 가용성 세그먼트 (옵션)
 
         Returns:
             DashboardData 딕셔너리 (25키)
@@ -70,7 +68,7 @@ class DashboardBuilder:
             **self._build_connection_info(is_connected, direction, filter_str, interface),
             **self._build_kpi_metrics(),
             **self._build_operational_info(),
-            **self._build_ui_display_data(availability_segments),
+            **self._build_ui_display_data(),
             "ml": ml_data,
         }
 
@@ -95,24 +93,22 @@ class DashboardBuilder:
         }
 
     # =========================================================================
-    # KPI 지표 (8키)
+    # KPI 지표 (7키)
     # =========================================================================
 
     def _build_kpi_metrics(self) -> dict:
-        """KPI 지표 빌드.
+        """KPI 지표 빌드 (7개).
 
         Store에서: PPS, 패킷 손실, 가용성, 지터
         Stats에서: 파싱률, 체크섬률
         """
         store_stats = self._store.get_stats_dict() if self._store else {}
-        hourly_avail = self._store.get_hourly_availability() if self._store else 0.0
 
         return {
             # Store에서 가져오기
             "capturePps": store_stats.get("pps", 0),
             "packetLoss": store_stats.get("packet_loss", 0),
             "availability": store_stats.get("availability", 0.0),
-            "availabilityHourly": hourly_avail,
             "jitterCurrent": store_stats.get("jitter_current", 0.0),
             "jitterP95": store_stats.get("jitter_p95", 0.0),
             # Stats에서 가져오기
@@ -148,7 +144,7 @@ class DashboardBuilder:
     # UI 표시 데이터 (7키)
     # =========================================================================
 
-    def _build_ui_display_data(self, availability_segments: Optional[list]) -> dict:
+    def _build_ui_display_data(self) -> dict:
         """UI 렌더링용 데이터 빌드."""
         # 장치 상태
         payload = self._stats.last_payload
@@ -163,31 +159,19 @@ class DashboardBuilder:
         # Store에서 데이터 가져오기
         if self._store:
             chart_data = self._store.get_chart_data(limit=180)
-            msg_code_stats = self._store.get_stats_by_code()
             connection_history = self._store.get_connection_history(limit=10)
             mode_transitions = self._store.get_mode_transitions(limit=10)
             emergency_counts = self._store.get_emergency_counts()
         else:
             chart_data = []
-            msg_code_stats = {}
             connection_history = []
             mode_transitions = []
             emergency_counts = {}
 
-        # 가용성 세그먼트
-        if availability_segments is None:
-            availability_segments = self._build_default_availability_segments()
-
         return {
             "combinedData": chart_data,
             "devices": devices,
-            "availabilitySegments": availability_segments,
-            "msgCodeStats": msg_code_stats,
             "connectionHistory": connection_history,
             "modeTransitions": mode_transitions,
             "emergencyCounts": emergency_counts,
         }
-
-    def _build_default_availability_segments(self) -> list:
-        """기본 가용성 세그먼트."""
-        return [{"start": 0, "end": 3600, "isUp": False}]

@@ -35,7 +35,7 @@
                                      ▼
                             ┌────────────────┐
                             │ UI Components  │
-                            │  (12개 패널)   │
+                            │  (11개 패널)   │
                             └────────────────┘
 ```
 
@@ -144,7 +144,7 @@ class DashboardBuilder:
     def build(self, is_connected, direction, ...) -> dict:
         return {
             **self._build_connection_info(),  # 5키
-            **self._build_kpi_metrics(),      # 8키
+            **self._build_kpi_metrics(),      # 7키
             **self._build_operational_info(), # 4키
             **self._build_ui_display_data(),  # 7키
             "ml": ml_data,                    # 1키

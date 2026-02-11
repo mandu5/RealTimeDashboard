@@ -36,7 +36,8 @@ class TestPacketRecord:
         assert result["timestamp"] == "12:00:00"
         assert result["sequence"] == 5
         assert result["msg_code"] == "0x01"
-        assert result["parse_ok"] is True
+        assert result["parse_ok"] == "✓"  # Live 모드 AG-Grid 표시용
+        assert result["checksum_ok"] == "✓"
         assert result["mode"] == "자율주행"
     
     def test_to_chart_point(self):
@@ -481,52 +482,3 @@ class TestHistoryTracking:
         assert counts["조종기"] == 2
         assert counts["비콘"] == 1
         assert counts["자율주행모듈"] == 1
-
-
-class TestMsgCodeStats:
-    """msg_code별 통계 테스트."""
-    
-    def test_msg_code_distribution(self):
-        """msg_code별 패킷 수."""
-        store = PacketStore()
-        now = datetime.now()
-        
-        # 0x01: 5개, 0x02: 3개
-        for i in range(8):
-            store.add(PacketRecord(
-                timestamp=now + timedelta(milliseconds=10 * i),
-                msg_code=0x01 if i < 5 else 0x02,
-                sequence=i,
-                size=100,
-                jitter_ms=None,
-                interval_ms=None,
-                parse_ok=True,
-                checksum_ok=True,
-            ))
-        
-        dist = store.get_msg_code_distribution()
-        
-        assert dist[0x01] == 5
-        assert dist[0x02] == 3
-    
-    def test_stats_by_code(self):
-        """특정 msg_code 통계."""
-        store = PacketStore()
-        now = datetime.now()
-        
-        for i in range(5):
-            store.add(PacketRecord(
-                timestamp=now + timedelta(milliseconds=10 * i),
-                msg_code=0x01,
-                sequence=i,
-                size=100 + i * 10,
-                jitter_ms=None,
-                interval_ms=None,
-                parse_ok=True,
-                checksum_ok=True,
-            ))
-        
-        stats = store.get_stats_by_code(0x01)
-        
-        assert stats["count"] == 5
-        assert stats["avg_size"] == 120.0  # (100+110+120+130+140)/5
