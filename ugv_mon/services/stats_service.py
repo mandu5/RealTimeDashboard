@@ -20,7 +20,6 @@ Single Responsibility: 통계 카운터 관리만 수행.
 """
 
 import logging
-from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
 from typing import TYPE_CHECKING, Optional
@@ -29,18 +28,6 @@ if TYPE_CHECKING:
     from ..pipeline import BatchProcessResult
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class StatsSnapshot:
-    """통계 스냅샷 (읽기 전용)."""
-    total_packets: int
-    parse_success: int
-    checksum_fail: int
-    parse_rate: float
-    checksum_fail_rate: float
-    is_connected: bool
-    last_packet_time: Optional[datetime]
 
 
 class StatsService:
@@ -125,34 +112,9 @@ class StatsService:
             elapsed = (datetime.now() - self._last_packet_time).total_seconds()
             return elapsed < self._timeout_sec
 
-    def get_snapshot(self) -> StatsSnapshot:
-        """현재 통계 스냅샷 반환."""
-        with self._lock:
-            return StatsSnapshot(
-                total_packets=self._total_packets,
-                parse_success=self._parse_success,
-                checksum_fail=self._checksum_fail,
-                parse_rate=self.get_parse_rate(),
-                checksum_fail_rate=self.get_checksum_fail_rate(),
-                is_connected=self.is_connected(),
-                last_packet_time=self._last_packet_time,
-            )
-
     # =========================================================================
     # 프로퍼티
     # =========================================================================
-
-    @property
-    def total_packets(self) -> int:
-        """총 패킷 수."""
-        with self._lock:
-            return self._total_packets
-
-    @property
-    def last_packet_time(self) -> Optional[datetime]:
-        """마지막 패킷 수신 시간."""
-        with self._lock:
-            return self._last_packet_time
 
     @property
     def last_packet_time_str(self) -> str:

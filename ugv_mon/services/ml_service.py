@@ -222,14 +222,3 @@ class MLService:
         """히스토리 초기화."""
         self._records.clear()
         self._score_history.clear()
-
-    # =========================================================================
-    # 프로퍼티
-    # =========================================================================
-
-    @property
-    def is_ready(self) -> bool:
-        """ML 모델 학습 완료 여부."""
-        if self._pipeline:
-            return self._pipeline.is_ready
-        return False
