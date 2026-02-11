@@ -99,7 +99,10 @@ def _create_main_content(data: dict) -> html.Div:
                 children=[
                     create_device_panel(data.get("devices", [])),
                     create_charts_panel(data),
-                    create_ml_analysis_panel(data),  # ML 이상 탐지
+                    html.Div(
+                        id="ml-analysis-container",
+                        children=create_ml_analysis_panel(data),
+                    ),
                 ],
                 style=FLEX_COLUMN,
             ),
