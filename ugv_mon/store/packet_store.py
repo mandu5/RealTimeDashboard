@@ -61,13 +61,13 @@ class PacketRecord:
     authority: str = "---"
 
     def to_log_dict(self) -> dict:
-        """로그 표시용 Dict 변환."""
+        """로그 표시용 Dict 변환 (Live 모드 AG-Grid field명과 일치)."""
         return {
             "timestamp": self.timestamp.strftime("%H:%M:%S"),
             "sequence": self.sequence,
             "msg_code": f"0x{self.msg_code:02X}",
-            "parse_ok": self.parse_ok,
-            "checksum_ok": self.checksum_ok,
+            "parse_ok": "✓" if self.parse_ok else "✗",
+            "checksum_ok": "✓" if self.checksum_ok else "✗",
             "mode": self.operation_mode,
             "authority": self.authority,
             "error": "" if self.parse_ok else "파싱 실패",
@@ -274,10 +274,6 @@ class PacketStore:
             expected = 100 * window_sec
             return round(min(len(recent) / expected * 100, 100), 1)
 
-    def get_hourly_availability(self) -> float:
-        """최근 1시간 가용성."""
-        return self.get_availability(window_sec=3600)
-
     def get_stats_dict(self) -> dict:
         """전체 통계 딕셔너리."""
         return {
@@ -319,31 +315,6 @@ class PacketStore:
                 })
 
             return result
-
-    def get_msg_code_distribution(self) -> dict[int, int]:
-        """msg_code별 패킷 수."""
-        with self._lock:
-            result: dict[int, int] = {}
-            for r in self._records:
-                result[r.msg_code] = result.get(r.msg_code, 0) + 1
-            return result
-
-    def get_stats_by_code(self, msg_code: Optional[int] = None) -> dict:
-        """msg_code별 통계."""
-        with self._lock:
-            if msg_code is not None:
-                filtered = [r for r in self._records if r.msg_code == msg_code]
-                one_sec_ago = datetime.now() - timedelta(seconds=1)
-                sizes = [r.size for r in filtered]
-                return {
-                    "pps": sum(1 for r in filtered if r.timestamp >= one_sec_ago),
-                    "packet_loss": self._packet_loss_by_msgcode.get(msg_code, 0),
-                    "avg_size": round(sum(sizes) / len(sizes), 1) if sizes else 0,
-                    "count": len(filtered),
-                }
-            else:
-                codes = {r.msg_code for r in self._records}
-                return {code: self.get_stats_by_code(code) for code in codes}
 
     # =========================================================================
     # UI 데이터 조회 (live_provider deque 대체)

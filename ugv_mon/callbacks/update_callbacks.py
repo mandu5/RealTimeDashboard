@@ -8,7 +8,7 @@ from dash.exceptions import PreventUpdate
 
 from ..ui.components.device_grid import create_device_grid
 from ..ui.components.kpi_card import create_kpi_cards_row
-from ..ui.layouts.charts import create_availability_timeline, create_communication_chart
+from ..ui.layouts.charts import create_communication_chart
 from ..ui.layouts.header import create_status_chips
 from ..ui.layouts.panels import (
     create_connection_history_content,
@@ -65,7 +65,6 @@ def _register_component_callback(app, provider) -> None:
             Output("emergency-status", "children"),
             Output("device-grid-container", "children"),
             Output("comm-quality-chart", "figure"),
-            Output("availability-timeline", "figure"),
             Output("current-pps-display", "children"),
             Output("current-jitter-display", "children"),
             Output("connection-toggle-btn", "children"),
@@ -95,7 +94,6 @@ def _register_component_callback(app, provider) -> None:
             create_emergency_indicators(data.get("emergencyStatus", {})),
             create_device_grid(data.get("devices", [])),
             create_communication_chart(chart_data, data.get("jitterP95", 0), 60),
-            create_availability_timeline(data.get("availabilitySegments", [])),
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
             btn_children,

@@ -4,15 +4,11 @@ Chart Components for UGV-MON Dashboard.
 Provides Plotly chart builders for:
 - PPS time series (packets per second)
 - Jitter time series with P95 reference line
-- Availability timeline (up/down segments)
 """
-
-from typing import Optional
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ...config import config
 from ...styles import get_chart_colors
 
 
@@ -31,7 +27,7 @@ def create_communication_chart(
     Args:
         data: List of dictionaries with 'timestamp', 'pps', 'jitter' keys
         p95: Current P95 jitter value (ms)
-        time_range_seconds: Time range to display in seconds (30, 60, or 300)
+        time_range_seconds: Time range to display in seconds (default 60)
 
     Returns:
         Plotly Figure object
@@ -46,9 +42,8 @@ def create_communication_chart(
     colors = get_chart_colors()
 
     # Filter data based on time range (keep only last N points)
-    # Assuming data points come every 1-2 seconds, calculate how many points to show
-    # Average poll interval is ~2 seconds, so for 30s we need ~15 points, 60s ~30 points, 300s ~150 points
-    points_per_second = 0.5  # Approximate: 1 point per 2 seconds
+    # Poll interval ~2s → ~0.5 points/sec → 60s ≈ 30 points
+    points_per_second = 0.5
     max_points = int(time_range_seconds * points_per_second)
     filtered_data = data[-max_points:] if len(data) > max_points else data
 
@@ -108,13 +103,8 @@ def create_communication_chart(
         col=1,
     )
 
-    # Update axes styling - 루프로 통합
-    if time_range_seconds <= 30:
-        n_ticks = 4
-    elif time_range_seconds <= 60:
-        n_ticks = 5
-    else:
-        n_ticks = 6
+    # Update axes styling
+    n_ticks = 5
 
     x_axis_style = {"showgrid": True, "gridwidth": 1, "gridcolor": colors["grid"], "nticks": n_ticks, "tickformat": "%H:%M:%S", "tickangle": 0, "title": None}
     y_axis_style = {"showgrid": True, "gridwidth": 1, "gridcolor": colors["grid"], "rangemode": "normal"}
@@ -132,142 +122,6 @@ def create_communication_chart(
         font={"family": "Inter, sans-serif", "size": 11},
         showlegend=False,
         hovermode="x unified",
-        dragmode=False,
-    )
-
-    return fig
-
-
-def create_availability_timeline(
-    segments: list[dict],
-    duration: Optional[int] = None
-) -> go.Figure:
-    """
-    Create availability timeline visualization.
-
-    Displays up/down segments as colored horizontal bars:
-    - Green: System up (available)
-    - Red: System down (unavailable)
-
-    Args:
-        segments: List of segment dictionaries with:
-            - start: Start time in seconds
-            - end: End time in seconds
-            - status: 'up' or 'down'
-        duration: Total timeline duration in seconds (default: from config)
-
-    Returns:
-        Plotly Figure object
-
-    Example:
-        >>> segments = [
-        ...     {"start": 0, "end": 2700, "status": "up"},
-        ...     {"start": 2700, "end": 2850, "status": "down"},
-        ...     {"start": 2850, "end": 3600, "status": "up"},
-        ... ]
-        >>> fig = create_availability_timeline(segments)
-    """
-    if duration is None:
-        duration = config.ui.timeline_duration_sec
-
-    colors = get_chart_colors()
-
-    fig = go.Figure()
-
-    # Filter and validate segments
-    valid_segments = []
-    for seg in segments:
-        start = seg.get("start", 0)
-        end = seg.get("end", 0)
-        # Only add segments with valid duration
-        if end > start and end > 0:
-            valid_segments.append(seg)
-
-    # If no valid segments, create a default "up" segment for the entire duration
-    if not valid_segments:
-        valid_segments = [{"start": 0, "end": duration, "status": "up"}]
-
-    for seg in valid_segments:
-        start = seg.get("start", 0)
-        end = seg.get("end", 0)
-        status = seg.get("status", "up")
-        color = colors["up_segment"] if status == "up" else colors["down_segment"]
-        segment_duration = end - start
-
-        # Create multiple points along the segment for better hover coverage
-        # Generate intermediate points every ~50 seconds for better hover interaction
-        num_points = max(2, int((end - start) / 50) + 1)
-        x_points = [start + (end - start) * i / (num_points - 1) for i in range(num_points)]
-        y_points = [0] * num_points
-
-        # Use Scatter with thick line and fill for better visibility
-        fig.add_trace(
-            go.Scatter(
-                x=x_points,
-                y=y_points,
-                mode="lines",
-                line={"color": color, "width": 40},  # 두꺼운 선으로 시각화
-                fill="tozeroy",
-                fillcolor=color,
-                hovertemplate=(
-                    f"Status: {'Up' if status == 'up' else 'Down'}<br>"
-                    f"Duration: {segment_duration:.0f}s<br>"
-                    f"Start: {start:.0f}s<br>"
-                    f"End: {end:.0f}s"
-                    "<extra></extra>"
-                ),
-                showlegend=False,
-            )
-        )
-
-    # Add legend indicators
-    fig.add_trace(
-        go.Scatter(
-            x=[None],
-            y=[None],
-            mode="markers",
-            marker={"size": 10, "color": colors["up_segment"]},
-            name="Up",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=[None],
-            y=[None],
-            mode="markers",
-            marker={"size": 10, "color": colors["down_segment"]},
-            name="Down",
-        )
-    )
-
-    fig.update_layout(
-        height=100,  # 차트 높이 증가
-        margin={"l": 40, "r": 40, "t": 30, "b": 50},  # 하단 여백 증가 (b=50)로 X축 레이블 공간 확보
-        xaxis={
-            "title": {
-                "text": "Time (seconds)",
-                "standoff": 10,  # 레이블과 축 사이 간격
-            },
-            "range": [0, duration],
-            "showgrid": True,
-            "gridcolor": colors["grid"],
-        },
-        yaxis={
-            "showticklabels": False,
-            "range": [-0.3, 0.3],  # 좁은 범위로 선이 두껍게 보이도록
-            "showgrid": False,
-            "fixedrange": True,  # Y축 고정
-        },
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        font={"family": "Inter, sans-serif", "size": 11},
-        legend={
-            "orientation": "h",
-            "yanchor": "bottom",
-            "y": 1.02,
-            "xanchor": "right",
-            "x": 1,
-        },
         dragmode=False,
     )
 

@@ -20,14 +20,14 @@ def get_log_column_defs() -> list[dict]:
     return [
         {
             "headerName": "Time",
-            "field": "time",
+            "field": "timestamp",
             "width": 100,
             "pinned": "left",
             "cellStyle": {"fontFamily": "monospace"},
         },
         {
             "headerName": "Seq",
-            "field": "seq",
+            "field": "sequence",
             "width": 80,
             "type": "numericColumn",
             "cellStyle": {"fontFamily": "monospace"},
@@ -85,7 +85,7 @@ def get_log_column_defs() -> list[dict]:
         },
         {
             "headerName": "Notes",
-            "field": "notes",
+            "field": "error",
             "width": 200,
             "flex": 2,
             "cellStyle": {
@@ -126,7 +126,7 @@ def create_log_table(
 
     Example:
         >>> logs = [
-        ...     {"time": "14:32:05.123", "seq": 49195, "msg_code": "0x01", ...},
+        ...     {"timestamp": "14:32:05", "sequence": 49195, "msg_code": "0x01", ...},
         ...     ...
         ... ]
         >>> table = create_log_table(logs)
@@ -309,7 +309,7 @@ def filter_logs(logs: list[dict], msg_code_filter: str, status_filter: str, sear
     # Search filter (전체 필드에서 검색)
     if search_text:
         search_lower = search_text.lower()
-        searchable_fields = ["time", "msg_code", "mode", "authority", "notes"]
+        searchable_fields = ["timestamp", "msg_code", "mode", "authority", "error"]
         filtered = [
             log for log in filtered
             if any(search_lower in str(log.get(field, "")).lower() for field in searchable_fields)

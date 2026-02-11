@@ -14,7 +14,6 @@ from ...config import config
 from ...styles import FLEX_COLUMN, KPI_GRID, PAGE_CONTAINER, TWO_COLUMN_GRID
 from .header import create_header_bar
 from .panels import (
-    create_availability_panel,
     create_charts_panel,
     create_connection_history_panel,
     create_device_panel,
@@ -100,7 +99,6 @@ def _create_main_content(data: dict) -> html.Div:
                 children=[
                     create_device_panel(data.get("devices", [])),
                     create_charts_panel(data),
-                    create_availability_panel(data),
                     create_ml_analysis_panel(data),  # ML 이상 탐지
                 ],
                 style=FLEX_COLUMN,

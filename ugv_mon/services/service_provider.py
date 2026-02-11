@@ -70,12 +70,6 @@ class ServiceProvider:
         # 빌더
         self._builder = DashboardBuilder(self._store, self._stats)
 
-        # 가용성 세그먼트 (이동 예정)
-        self._start_time = datetime.now()
-        self._availability_segments: list[dict] = []
-        self._last_avail_change_time: Optional[datetime] = None
-        self._last_avail_state: Optional[bool] = None
-
     # =========================================================================
     # 캡처 제어 (CaptureService 위임)
     # =========================================================================
@@ -128,7 +122,7 @@ class ServiceProvider:
 
         1. Processor 호출 → 파싱 수행
         2. Stats 업데이트
-        3. 가용성 세그먼트 기록
+        3. 연결 상태 기록
         4. Dict 빌드
         """
         with self._lock:
@@ -138,11 +132,8 @@ class ServiceProvider:
             # 2. 통계 업데이트
             self._stats.update(result)
 
-            # 3. 가용성 세그먼트 기록
+            # 3. 연결 상태 기록
             is_connected = self._stats.is_connected()
-            self._record_uptime_segment(is_connected)
-
-            # 4. 연결 상태 기록
             self._store.record_connection_change(is_connected)
 
             return self._build_data()
@@ -154,92 +145,13 @@ class ServiceProvider:
         # ML 예측
         ml_data = self._ml.predict(self._store)
 
-        # 가용성 세그먼트
-        avail_segments = self._build_availability_segments()
-
         return self._builder.build(
             is_connected=is_connected,
             direction=self._capture.direction,
             filter_str=self._capture.filter_str,
             interface=self._capture.interface,
             ml_data=ml_data,
-            availability_segments=avail_segments,
         )
-
-    # =========================================================================
-    # 가용성 세그먼트 (live_provider에서 이동)
-    # =========================================================================
-
-    def _record_uptime_segment(self, new_is_up: bool) -> None:
-        """연결 상태 변화 시 가용성(uptime) 세그먼트 기록."""
-        now = datetime.now()
-
-        if self._last_avail_change_time is None:
-            self._last_avail_change_time = now
-            self._last_avail_state = new_is_up
-            return
-
-        if new_is_up == self._last_avail_state:
-            return
-
-        start_sec = (self._last_avail_change_time - self._start_time).total_seconds()
-        end_sec = (now - self._start_time).total_seconds()
-
-        self._availability_segments.append({
-            "start": max(0, start_sec),
-            "end": max(0, end_sec),
-            "isUp": self._last_avail_state,
-        })
-
-        self._last_avail_change_time = now
-        self._last_avail_state = new_is_up
-        self._prune_old_uptime_segments(max_sec=3600)
-
-    def _prune_old_uptime_segments(self, max_sec: int = 3600) -> None:
-        """보관 기간 초과 세그먼트 제거."""
-        now = datetime.now()
-        cutoff = (now - self._start_time).total_seconds() - max_sec
-        self._availability_segments = [
-            seg for seg in self._availability_segments if seg["end"] > cutoff
-        ]
-
-    def _build_availability_segments(self) -> list[dict]:
-        """가용성 세그먼트 반환."""
-        timeline_sec = config.ui.timeline_duration_sec
-        now = datetime.now()
-        current_offset = (now - self._start_time).total_seconds()
-        is_connected = self._stats.is_connected()
-
-        if not self._availability_segments:
-            return [{"start": 0, "end": timeline_sec, "isUp": is_connected}]
-
-        normalized = []
-        for seg in self._availability_segments:
-            start_pos = timeline_sec - (current_offset - seg["start"])
-            end_pos = timeline_sec - (current_offset - seg["end"])
-
-            if end_pos < 0 or start_pos > timeline_sec:
-                continue
-
-            normalized.append({
-                "start": max(0, start_pos),
-                "end": min(timeline_sec, end_pos),
-                "isUp": seg["isUp"],
-            })
-
-        if self._last_avail_change_time:
-            last_start = timeline_sec - (
-                current_offset -
-                (self._last_avail_change_time - self._start_time).total_seconds()
-            )
-            if last_start < timeline_sec:
-                normalized.append({
-                    "start": max(0, last_start),
-                    "end": timeline_sec,
-                    "isUp": self._last_avail_state if self._last_avail_state is not None else is_connected,
-                })
-
-        return normalized if normalized else [{"start": 0, "end": timeline_sec, "isUp": is_connected}]
 
     # =========================================================================
     # 로그 관련 (호환성)

@@ -69,8 +69,8 @@ class MLService:
             self._pipeline = MLPipeline()
             self._rule_detector = RuleDetector()
 
-            # 기존 모델 로드 시도
-            if self._pipeline.load():
+            # MLPipeline.__init__에서 _try_load_model() 자동 호출됨
+            if self._pipeline.is_trained:
                 logger.info("[ML] 저장된 모델 로드 완료")
             else:
                 logger.info("[ML] 저장된 모델 없음, Rule 탐지만 활성화")
@@ -111,7 +111,7 @@ class MLService:
         ml_ready = False
 
         if self._pipeline:
-            if not self._pipeline.is_ready:
+            if not self._pipeline.is_trained:
                 # 학습 시도
                 stats_history = store.get_stats_history(limit=self._min_samples)
                 if len(stats_history) >= self._min_samples:
@@ -129,15 +129,11 @@ class MLService:
         return self._build_result(rule_result, ml_result, ml_ready)
 
     def _get_current_stats(self, store: "PacketStore") -> dict:
-        """PacketStore에서 ML용 통계 추출."""
-        return {
-            "jitter_current": store.last_jitter or 0,
-            "jitter_p95": store.get_jitter_p95() or 0,
-            "pps": store.pps,
-            "loss_rate": store.packet_loss_rate,
-            "parse_success_rate": store.get_parse_success_rate(),
-            "checksum_fail_rate": store.get_checksum_fail_rate(),
-        }
+        """PacketStore에서 ML용 통계 추출 (Live 모드 호환)."""
+        stats = store.get_stats_dict()
+        stats["parse_success_rate"] = store.get_parse_success_rate()
+        stats["checksum_fail_rate"] = store.get_checksum_fail_rate()
+        return stats
 
     def _build_result(self, rule_result, ml_result, ml_ready: bool) -> dict:
         """앙상블 결과 빌드."""

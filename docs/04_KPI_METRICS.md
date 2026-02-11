@@ -4,7 +4,7 @@
 
 ## 개요
 
-UGV-MON은 8개의 핵심 KPI를 실시간으로 계산하고 표시합니다. 모든 계산은 `packet_store.py`의 `PacketStore` 클래스에서 수행됩니다.
+UGV-MON은 7개의 핵심 KPI를 실시간으로 계산하고 표시합니다. 모든 계산은 `packet_store.py`의 `PacketStore` 클래스에서 수행됩니다.
 
 ---
 
@@ -30,26 +30,7 @@ def get_pps(self) -> int:
 
 ---
 
-## 2. 필터 통과율 (Filter Pass %)
-
-### 정의
-
-BPF 필터를 통과한 패킷의 비율
-
-### 계산 방법
-
-```python
-# services/stats_service.py에서 집계
-filter_pass = (filtered_packets / total_captured) * 100
-```
-
-### 예상값
-
-- 정상: 100% (모든 UDP 패킷이 필터 통과)
-
----
-
-## 3. 파싱 성공률 (Parse Success %)
+## 2. 파싱 성공률 (Parse Success %)
 
 ### 정의
 
@@ -73,7 +54,7 @@ return (success_count / total_count) * 100
 
 ---
 
-## 4. 체크섬 오류율 (Checksum Fail %)
+## 3. 체크섬 오류율 (Checksum Fail %)
 
 ### 정의
 
@@ -93,7 +74,7 @@ return (fail_count / total_count) * 100
 
 ---
 
-## 5. 패킷 손실 (Packet Loss)
+## 4. 패킷 손실 (Packet Loss)
 
 ### 정의
 
@@ -114,7 +95,7 @@ return (fail_count / total_count) * 100
 
 ---
 
-## 6. 가용성 (Availability %)
+## 5. 가용성 (Availability %)
 
 ### 정의
 
@@ -150,11 +131,10 @@ availability = 3/5 × 100 = 60%
 ### 윈도우
 
 - 5분 (300초): 기본 표시
-- 1시간 (3600초): hourly 배지
 
 ---
 
-## 7. 지터 - 현재 (Current Jitter)
+## 6. 지터 - 현재 (Current Jitter)
 
 ### 정의
 
@@ -179,7 +159,7 @@ availability = 3/5 × 100 = 60%
 
 ---
 
-## 8. 지터 P95 (Jitter P95)
+## 7. 지터 P95 (Jitter P95)
 
 ### 정의
 
@@ -213,27 +193,6 @@ return sorted_jitters[p95_idx]
 | **위치**      | 패킷 데이터 [0:4] 바이트 | Python `datetime.now()` |
 | **생성 시점** | VIC 송신 시              | 우리 시스템 수신 시     |
 | **용도**      | 시퀀스 추출 (하위 4비트) | **지터/가용성 계산**    |
-
----
-
-## msg_code별 분리 계산
-
-### 이유
-
-0x01, 0x25, 0x40 메시지는 각각 다른 주기로 송신되므로 별도 계산 필요
-
-```python
-# packet_store.py 내부
-self._last_by_code: Dict[int, Dict]  # msg_code별 마지막 timestamp/interval
-```
-
-### msg_code 종류
-
-| 코드 | 명칭      | 주기 |
-| ---- | --------- | ---- |
-| 0x01 | 상태 보고 | 1초  |
-| 0x25 | 확장 상태 | 1초  |
-| 0x40 | 장치 상태 | 1초  |
 
 ---
 

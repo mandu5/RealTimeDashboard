@@ -161,9 +161,6 @@ graph TD
 1. **Pipeline**: `Sniffer`가 패킷을 잡아 `Queue`에 넣고, `Processor`가 꺼내서 파싱 후 `Store`에 저장.
 2. **Service**: `StatsService`와 `MLService`가 `Store`의 데이터를 분석.
 3. **Presentation**: `DashApp`이 2초마다 `ServiceProvider`를 통해 분석된 데이터를 조회하여 UI 갱신.
-4. **Pipeline**: `Sniffer`가 패킷을 잡아 `Queue`에 넣고, `Processor`가 꺼내서 파싱 후 `Store`에 저장.
-5. **Service**: `StatsService`와 `MLService`가 `Store`의 데이터를 분석.
-6. **Presentation**: `DashApp`이 2초마다 `ServiceProvider`를 통해 분석된 데이터를 조회하여 UI 갱신.
 
 ## 테스트
 
