@@ -13,6 +13,8 @@ from typing import Optional
 
 import plotly.graph_objects as go
 
+from ._empty_chart import ML_CHART_HEIGHT_3D, create_empty_ml_chart
+
 
 def create_anomaly_3d_scatter(
     records: list[dict],
@@ -39,7 +41,18 @@ def create_anomaly_3d_scatter(
         >>> fig.show()
     """
     if not records:
-        return _create_empty_figure()
+        return create_empty_ml_chart(
+            "3D Anomaly Detection View (데이터 없음)",
+            "데이터가 충분히 수집되면 표시됩니다",
+            {
+                "scene": {
+                    "xaxis": {"title": "지터 (ms)"},
+                    "yaxis": {"title": "PPS"},
+                    "zaxis": {"title": "손실률 (%)"},
+                },
+                "height": ML_CHART_HEIGHT_3D,
+            },
+        )
 
     # 데이터 추출
     jitters = [r.get("jitter_current", 0) for r in records]
@@ -100,7 +113,7 @@ def create_anomaly_3d_scatter(
             "font": {"size": 16, "color": "white"},
             "x": 0.5,
         },
-        height=450,
+        height=ML_CHART_HEIGHT_3D,
         margin={"l": 0, "r": 0, "t": 50, "b": 0},
         showlegend=False,
     )
@@ -133,26 +146,3 @@ def _scores_to_colors(
     return colors
 
 
-def _create_empty_figure() -> go.Figure:
-    """데이터 없을 때 빈 Figure 반환."""
-    fig = go.Figure()
-    fig.update_layout(
-        scene={
-            "xaxis": {"title": "지터 (ms)"},
-            "yaxis": {"title": "PPS"},
-            "zaxis": {"title": "손실률 (%)"},
-        },
-        title="3D Anomaly Detection View (데이터 없음)",
-        height=450,
-        annotations=[
-            {
-                "text": "데이터가 충분히 수집되면 표시됩니다",
-                "showarrow": False,
-                "xref": "paper",
-                "yref": "paper",
-                "x": 0.5,
-                "y": 0.5,
-            }
-        ],
-    )
-    return fig

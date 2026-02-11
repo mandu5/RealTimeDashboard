@@ -35,9 +35,9 @@ def create_kpi_card(
 
 
 def create_kpi_cards_row(data: dict) -> list:
-    """7개 KPI 카드 생성 (필터 통과율 제거)."""
+    """7개 KPI 카드 생성."""
     return [
-        create_kpi_card("수신 PPS", data.get("capturePps", 0), "pps", True, 70, "blue"),
+        create_kpi_card("수신 PPS", data.get("capturePps", 0), "pps"),
         create_kpi_card("파싱 성공률", data.get("parseSuccess", 0), "%", True, data.get("parseSuccess", 0), "green"),
         create_kpi_card("체크섬 오류율", data.get("checksumFail", 0), "%"),
         create_kpi_card("추정 패킷 손실", data.get("packetLoss", 0), "pkts"),

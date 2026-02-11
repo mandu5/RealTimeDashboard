@@ -36,6 +36,7 @@ class UIConfig:
     poll_interval_ms: int = 2000
     max_log_entries: int = 200
     max_chart_points: int = 60
+    chart_time_range_sec: int = 60
     timeline_duration_sec: int = 3600
     down_threshold_sec: float = 5.0
 

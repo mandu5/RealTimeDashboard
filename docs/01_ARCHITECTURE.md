@@ -21,7 +21,7 @@
 │   └── PacketStore (deque) ← 통합 저장소                          │
 ├─────────────────────────────────────────────────────────────────┤
 │   [UI Layer]                                                     │
-│   └── Dash App → Callbacks → UI (12개 패널)                      │
+│   └── Dash App → Callbacks → UI (11개 패널)                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -106,7 +106,7 @@ ugv_mon/
 ├── ui/                   # UI 모듈
 │   ├── components/       # 재사용 컴포넌트
 │   ├── layouts/          # 레이아웃
-│   └── charts/ml/        # ML 차트
+│   └── ml/               # ML 차트
 ├── callbacks/            # Dash 콜백
 └── mock/                 # ⚠️ DEV ONLY
 ```

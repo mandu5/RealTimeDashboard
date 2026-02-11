@@ -47,7 +47,7 @@ UGV-MON은 **Isolation Forest** 기반 ML 이상 탐지와 **규칙 기반** 탐
 class MLPipeline:
     def train(self, features: np.ndarray) -> bool
     def predict(self, features: np.ndarray) -> Dict
-    def get_status() -> str  # "not_ready" | "training" | "ready"
+    def get_status(self) -> dict[str, Any]  # 실제 반환 구조
 ```
 
 ### analysis/ml_anomaly_detector.py
@@ -67,7 +67,7 @@ class MLAnomalyDetector:
 
 ```python
 class RuleDetector:
-    def check(self, metrics: Dict) -> Tuple[bool, List[str]]
+    def detect(self, metrics: Dict) -> RuleResult  # is_anomaly, violated_rules 포함
     #         is_anomaly, triggered_rules
 ```
 

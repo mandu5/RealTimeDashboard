@@ -1,6 +1,6 @@
 # UGV-MON 파일 구조
 
-> **최종 업데이트**: 2026-02-08 (리팩터링 v2)
+> **최종 업데이트**: 2026-02-09 (리팩터링 v3)
 
 ## 디렉토리 구조
 
@@ -10,7 +10,7 @@ opus1/
 ├── requirements.txt          # 의존성 목록
 ├── pyproject.toml            # 프로젝트 설정
 │
-├── tests/                    # 단위 테스트 (52개)
+├── tests/                    # 단위 테스트 (50개)
 ├── docs/                     # 문서
 │
 └── ugv_mon/                  # 메인 Python 패키지
@@ -67,9 +67,9 @@ opus1/
     │   ├── layouts/          # 레이아웃
     │   │   ├── main_layout.py    # 메인 레이아웃
     │   │   ├── header.py         # 헤더 바
-    │   │   ├── panels.py         # 12개 패널
+    │   │   ├── panels.py         # 11개 패널
     │   │   └── charts.py         # Plotly 차트
-    │   └── charts/ml/        # ML 시각화
+    │   └── ml/               # ML 시각화
     │       ├── anomaly_3d.py     # 3D 산점도
     │       ├── anomaly_timeline.py
     │       └── feature_importance.py
