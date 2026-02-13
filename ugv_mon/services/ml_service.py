@@ -131,6 +131,8 @@ class MLService:
     def _get_current_stats(self, store: "PacketStore") -> dict:
         """PacketStore에서 ML용 통계 추출 (Live 모드 호환)."""
         stats = store.get_stats_dict()
+        if stats is None:
+            stats = {}
         stats["parse_success_rate"] = store.get_parse_success_rate()
         stats["checksum_fail_rate"] = store.get_checksum_fail_rate()
         return stats
@@ -194,6 +196,8 @@ class MLService:
 
     def _update_records(self, stats: dict, now: datetime) -> None:
         """3D 차트용 레코드 업데이트."""
+        if stats is None:
+            stats = {}
         record = {
             "timestamp": now.strftime("%H:%M:%S"),
             "jitter_current": stats.get("jitter_current", 0),
