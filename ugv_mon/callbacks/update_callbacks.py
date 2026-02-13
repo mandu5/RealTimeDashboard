@@ -80,13 +80,17 @@ def _register_component_callback(app, provider) -> None:
             Output("mode-transitions-container", "children"),
             Output("emergency-stats-container", "children"),
             Output("ml-analysis-container", "children"),
+            Output("log-table", "rowData"),
+            Output("log-table-title", "children"),
         ],
         Input("dashboard-data", "data"),
     )
     def update_main_components(data):
+        if data is None:
+            data = {}
         chart_data = data.get("combinedData", [])
         latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
-        is_conn = getattr(provider, '_is_connected', False)
+        is_conn = data.get("connected", False)
 
         btn_children = [
             html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
@@ -110,6 +114,8 @@ def _register_component_callback(app, provider) -> None:
             create_mode_transitions_content(data),
             create_emergency_stats_content(data),
             create_ml_analysis_panel(data),
+            data.get("logs", []),
+            f"로그/이벤트 테이블 (최근 {len(data.get('logs', []))}개)",
         )
 
 
@@ -134,20 +140,32 @@ def _register_control_callbacks(app, provider) -> None:
 def _register_ui_callbacks(app, provider) -> None:
     """UI 제어 콜백 (연결, 방향)."""
     @app.callback(
-        [Output("connection-toggle-btn", "children", allow_duplicate=True),
-         Output("connection-toggle-btn", "variant", allow_duplicate=True),
-         Output("connection-toggle-btn", "color", allow_duplicate=True)],
-        Input("connection-toggle-btn", "n_clicks"), prevent_initial_call=True,
+        [
+            Output("connection-toggle-btn", "children", allow_duplicate=True),
+            Output("connection-toggle-btn", "variant", allow_duplicate=True),
+            Output("connection-toggle-btn", "color", allow_duplicate=True),
+            Output("dashboard-data", "data", allow_duplicate=True),
+        ],
+        Input("connection-toggle-btn", "n_clicks"),
+        State("dashboard-data", "data"),
+        prevent_initial_call=True,
     )
-    def on_connection_toggle(n_clicks):
+    def on_connection_toggle(n_clicks, current_data):
         if not hasattr(provider, 'toggle_connection'):
             raise PreventUpdate
-        is_conn = provider.toggle_connection()
+        provider.toggle_connection()
+        new_data = provider.update_data(current_data or {})
+        is_conn = new_data.get("connected", False)
         btn_children = [
             html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
             html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
         ]
-        return (btn_children, "filled" if is_conn else "outline", "green" if is_conn else "red")
+        return (
+            btn_children,
+            "filled" if is_conn else "outline",
+            "green" if is_conn else "red",
+            new_data,
+        )
 
     @app.callback(
         [Output("direction-toggle-btn", "children", allow_duplicate=True),

@@ -134,8 +134,11 @@ class ServiceProvider:
             return self._build_data()
 
     def _build_data(self) -> dict:
-        """Dict 빌드."""
-        is_connected = self._stats.is_connected()
+        """Dict 빌드.
+
+        캡처가 꺼져 있으면 data도 즉시 disconnected 반영.
+        """
+        is_connected = self._capture.is_running and self._stats.is_connected()
 
         # ML 예측
         ml_data = self._ml.predict(self._store)

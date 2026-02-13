@@ -62,7 +62,7 @@ def create_main_layout(initial_data: dict, initial_logs: list) -> dmc.MantinePro
                     create_header_bar(initial_data),
                     _create_kpi_section(initial_data),
                     _create_main_content(initial_data),
-                    create_log_panel(initial_logs),
+                    create_log_panel(initial_data.get("logs", initial_logs)),
                 ],
                 style=PAGE_CONTAINER,
             ),

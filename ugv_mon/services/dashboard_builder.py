@@ -168,10 +168,13 @@ class DashboardBuilder:
             mode_transitions = []
             emergency_counts = {}
 
+        logs = self._store.get_logs(limit=50) if self._store else []
+
         return {
             "combinedData": chart_data,
             "devices": devices,
             "connectionHistory": connection_history,
             "modeTransitions": mode_transitions,
             "emergencyCounts": emergency_counts,
+            "logs": logs,
         }
