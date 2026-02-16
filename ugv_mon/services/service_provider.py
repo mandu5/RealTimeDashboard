@@ -14,19 +14,17 @@
 """
 
 import logging
-from datetime import datetime
 from threading import Lock
 from typing import Optional
 
-from .dashboard_builder import DashboardBuilder
+from ..config import config
+from ..constants import PACKET_QUEUE_MAX_SIZE, PACKET_STORE_WINDOW_SEC
 from ..pipeline.icd_parser import ICDParser
 from ..pipeline.processor import PacketProcessor
 from ..pipeline.queue import PacketQueue
-from ..config import config
 from ..store.packet_store import PacketStore
-
-# 직접 import로 순환 참조 방지
 from .capture_service import CaptureService
+from .dashboard_builder import DashboardBuilder
 from .ml_service import MLService
 from .stats_service import StatsService
 
@@ -52,9 +50,9 @@ class ServiceProvider:
         # =========================================================
 
         # 캡처 컴포넌트
-        self._queue = PacketQueue(max_size=1000)
+        self._queue = PacketQueue(max_size=PACKET_QUEUE_MAX_SIZE)
         self._parser = ICDParser()
-        self._store = PacketStore(window_sec=3600)
+        self._store = PacketStore(window_sec=PACKET_STORE_WINDOW_SEC)
         self._processor = PacketProcessor(self._queue, self._parser, self._store)
 
         # 서비스 레이어
@@ -86,10 +84,7 @@ class ServiceProvider:
         """연결 토글."""
         with self._lock:
             result = self._capture.toggle()
-            if not result:
-                self._store.reset_stream_state()
-            else:
-                self._store.reset_stream_state()
+            self._store.reset_stream_state()
             return result
 
     def toggle_direction(self) -> str:

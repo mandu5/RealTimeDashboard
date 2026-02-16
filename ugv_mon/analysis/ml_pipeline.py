@@ -11,10 +11,12 @@ PacketStore → FeatureExtractor → MLAnomalyDetector 흐름을 관리합니다
 """
 
 import logging
+import pickle
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from ..constants import ML_CACHE_DURATION_SEC, ML_CONTAMINATION, ML_MIN_TRAINING_SAMPLES
 from .feature_extractor import FeatureExtractor
 from .ml_anomaly_detector import AnomalyResult, MLAnomalyDetector
 
@@ -38,12 +40,11 @@ class MLPipeline:
     """
 
     DEFAULT_MODEL_PATH = "models/anomaly_detector.pkl"
-    MIN_TRAINING_SAMPLES = 500  # 최소 학습 샘플 수
 
     def __init__(
         self,
         model_path: str = DEFAULT_MODEL_PATH,
-        contamination: float = 0.05,
+        contamination: float = ML_CONTAMINATION,
     ):
         """
         Args:
@@ -57,7 +58,7 @@ class MLPipeline:
         # 캐시
         self._last_result: Optional[AnomalyResult] = None
         self._last_predict_time: Optional[datetime] = None
-        self._cache_duration_sec = 1.0  # 1초 캐시
+        self._cache_duration_sec = ML_CACHE_DURATION_SEC
 
         # 학습 이력
         self._training_history: list[dict[str, Any]] = []
@@ -89,10 +90,10 @@ class MLPipeline:
         Returns:
             학습 성공 여부
         """
-        if len(stats_history) < self.MIN_TRAINING_SAMPLES:
+        if len(stats_history) < ML_MIN_TRAINING_SAMPLES:
             logger.warning(
                 f"[ML] 학습 데이터 부족: {len(stats_history)} < "
-                f"{self.MIN_TRAINING_SAMPLES}"
+                f"{ML_MIN_TRAINING_SAMPLES}"
             )
             return False
 
@@ -194,5 +195,5 @@ class MLPipeline:
             try:
                 self._detector = MLAnomalyDetector.load(self._model_path)
                 logger.info(f"[ML] 저장된 모델 로드: {self._model_path}")
-            except Exception as e:
+            except (pickle.UnpicklingError, KeyError, ValueError, OSError) as e:
                 logger.warning(f"[ML] 모델 로드 실패: {e}")

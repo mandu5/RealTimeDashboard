@@ -14,6 +14,16 @@ from typing import Optional
 
 import numpy as np
 
+from ..constants import (
+    FEATURE_JITTER_SCALING,
+    FEATURE_LOSS_SCALING,
+    FEATURE_PPS_SCALING,
+    FEATURE_VOLATILITY_MIN_THRESHOLD,
+    FEATURE_WEIGHT_JITTER,
+    FEATURE_WEIGHT_LOSS,
+    FEATURE_WEIGHT_PPS,
+)
+
 
 @dataclass
 class FeatureVector:
@@ -138,7 +148,7 @@ class FeatureExtractor:
         변동성 = (P95 - current) / max(P95, 1)
         값이 클수록 지터가 불안정함을 의미.
         """
-        if jitter_p95 < 0.1:
+        if jitter_p95 < FEATURE_VOLATILITY_MIN_THRESHOLD:
             return 0.0
         return abs(jitter_p95 - jitter_current) / max(jitter_p95, 1.0)
 
@@ -178,16 +188,20 @@ class FeatureExtractor:
             - 손실률: 20% (낮을수록 좋음)
         """
         # 지터 점수 (5ms 이하 = 100점, 50ms 이상 = 0점)
-        jitter_score = max(0, min(100, 100 - (jitter / 0.5)))
+        jitter_score = max(0, min(100, 100 - (jitter / FEATURE_JITTER_SCALING)))
 
-        # PPS 점수 (100 PPS = 100점 기준)
-        pps_score = max(0, min(100, pps))
+        # PPS 점수 (1000 PPS = 100점 기준, 라이브 환경 PPS 범위에 맞춤)
+        pps_score = max(0, min(100, pps / FEATURE_PPS_SCALING))
 
         # 손실률 점수 (0% = 100점, 10% 이상 = 0점)
-        loss_score = max(0, min(100, 100 - (loss_rate * 10)))
+        loss_score = max(0, min(100, 100 - (loss_rate * FEATURE_LOSS_SCALING)))
 
         # 가중 평균
-        score = (jitter_score * 0.4) + (pps_score * 0.4) + (loss_score * 0.2)
+        score = (
+            (jitter_score * FEATURE_WEIGHT_JITTER)
+            + (pps_score * FEATURE_WEIGHT_PPS)
+            + (loss_score * FEATURE_WEIGHT_LOSS)
+        )
         return round(score, 1)
 
     def reset(self) -> None:
