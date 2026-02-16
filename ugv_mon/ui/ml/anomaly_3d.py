@@ -15,6 +15,16 @@ import plotly.graph_objects as go
 
 from ._empty_chart import ML_CHART_HEIGHT_3D, create_empty_ml_chart
 
+# 축 공통 스타일
+_AXIS_STYLE: dict = {
+    "gridcolor": "rgba(75, 85, 99, 0.4)",
+    "zerolinecolor": "rgba(107, 114, 128, 0.5)",
+    "backgroundcolor": "rgba(17, 24, 39, 0.6)",
+    "showbackground": True,
+    "tickfont": {"size": 10, "color": "#9ca3af"},
+    "titlefont": {"size": 11, "color": "#d1d5db"},
+}
+
 
 def create_anomaly_3d_scatter(
     records: list[dict],
@@ -23,7 +33,8 @@ def create_anomaly_3d_scatter(
 ) -> go.Figure:
     """3D 이상 탐지 산점도 생성.
 
-    정상 데이터는 파란색, 이상 데이터는 빨간색으로 표시.
+    정상/경고/이상 데이터를 별도 트레이스로 분리하여 범례를 표시합니다.
+    연속 컬러스케일로 이상 심각도를 시각적으로 구분하고,
     마커 크기는 이상 점수의 심각도에 비례합니다.
 
     Args:
@@ -46,9 +57,10 @@ def create_anomaly_3d_scatter(
             "데이터가 충분히 수집되면 표시됩니다",
             {
                 "scene": {
-                    "xaxis": {"title": "지터 (ms)"},
-                    "yaxis": {"title": "PPS"},
-                    "zaxis": {"title": "손실률 (%)"},
+                    "xaxis": {"title": "지터 (ms)", **_AXIS_STYLE},
+                    "yaxis": {"title": "PPS", **_AXIS_STYLE},
+                    "zaxis": {"title": "손실률 (%)", **_AXIS_STYLE},
+                    "bgcolor": "rgba(10, 15, 28, 1)",
                 },
                 "height": ML_CHART_HEIGHT_3D,
             },
@@ -64,85 +76,158 @@ def create_anomaly_3d_scatter(
     if anomaly_scores is None:
         anomaly_scores = [0.0] * len(records)
 
-    # 색상: 이상 점수 기준 (낮을수록 빨간색)
-    colors = _scores_to_colors(anomaly_scores, threshold)
-
-    # 마커 크기: 이상일수록 큼 (최소 5, 최대 15)
-    sizes = [
-        max(5, min(15, 5 + abs(s) * 20)) if s < threshold else 5
-        for s in anomaly_scores
-    ]
-
-    fig = go.Figure(data=[go.Scatter3d(
-        x=jitters,
-        y=pps_values,
-        z=loss_rates,
-        mode="markers",
-        marker={
-            "size": sizes,
-            "color": colors,
-            "opacity": 0.8,
-            "line": {"width": 0.5, "color": "white"},
-        },
-        text=[
-            f"시간: {ts}<br>"
-            f"지터: {j:.2f}ms<br>"
-            f"PPS: {p}<br>"
-            f"손실률: {l:.2f}%<br>"
-            f"이상 점수: {s:.3f}"
-            for ts, j, p, l, s in zip(
-                timestamps, jitters, pps_values, loss_rates, anomaly_scores
-            )
-        ],
-        hoverinfo="text",
-        name="데이터 포인트",
-    )])
-
-    # 레이아웃 설정
-    fig.update_layout(
-        scene={
-            "xaxis": {"title": "지터 (ms)", "gridcolor": "#444", "zerolinecolor": "#666"},
-            "yaxis": {"title": "PPS", "gridcolor": "#444", "zerolinecolor": "#666"},
-            "zaxis": {"title": "손실률 (%)", "gridcolor": "#444", "zerolinecolor": "#666"},
-            "bgcolor": "rgba(17, 24, 39, 0.8)",  # 다크 배경
-        },
-        paper_bgcolor="rgba(17, 24, 39, 1)",
-        font={"color": "white"},
-        title={
-            "text": "3D Anomaly Detection View",
-            "font": {"size": 16, "color": "white"},
-            "x": 0.5,
-        },
-        height=ML_CHART_HEIGHT_3D,
-        margin={"l": 0, "r": 0, "t": 50, "b": 0},
-        showlegend=False,
+    # 정상 / 경고 / 이상 데이터 분류
+    normal, warning, anomaly = _split_by_status(
+        jitters, pps_values, loss_rates, timestamps, anomaly_scores, threshold,
     )
 
-    # 카메라 앵글 설정 (45도 기울기)
+    fig = go.Figure()
+
+    # --- 정상 트레이스 (파란색 계열) ---
+    if normal["x"]:
+        fig.add_trace(go.Scatter3d(
+            x=normal["x"], y=normal["y"], z=normal["z"],
+            mode="markers",
+            marker={
+                "size": normal["sizes"],
+                "color": normal["scores"],
+                "colorscale": [[0, "#1e40af"], [1, "#60a5fa"]],
+                "cmin": threshold,
+                "cmax": 0.1,
+                "opacity": 0.7,
+                "line": {"width": 0.3, "color": "rgba(255,255,255,0.2)"},
+            },
+            text=normal["texts"],
+            hoverinfo="text",
+            name=f"Normal ({len(normal['x'])})",
+            legendgroup="normal",
+        ))
+
+    # --- 경고 트레이스 (노란색 계열) ---
+    if warning["x"]:
+        fig.add_trace(go.Scatter3d(
+            x=warning["x"], y=warning["y"], z=warning["z"],
+            mode="markers",
+            marker={
+                "size": warning["sizes"],
+                "color": "#fbbf24",
+                "opacity": 0.85,
+                "symbol": "diamond",
+                "line": {"width": 0.5, "color": "rgba(251, 191, 36, 0.6)"},
+            },
+            text=warning["texts"],
+            hoverinfo="text",
+            name=f"Warning ({len(warning['x'])})",
+            legendgroup="warning",
+        ))
+
+    # --- 이상 트레이스 (빨간색 계열, 글로우 효과) ---
+    if anomaly["x"]:
+        fig.add_trace(go.Scatter3d(
+            x=anomaly["x"], y=anomaly["y"], z=anomaly["z"],
+            mode="markers",
+            marker={
+                "size": anomaly["sizes"],
+                "color": anomaly["scores"],
+                "colorscale": [[0, "#dc2626"], [0.5, "#ef4444"], [1, "#fca5a5"]],
+                "cmin": -1.0,
+                "cmax": threshold,
+                "opacity": 0.95,
+                "symbol": "x",
+                "line": {"width": 1, "color": "rgba(239, 68, 68, 0.8)"},
+            },
+            text=anomaly["texts"],
+            hoverinfo="text",
+            name=f"Anomaly ({len(anomaly['x'])})",
+            legendgroup="anomaly",
+        ))
+
+    # --- 레이아웃 ---
+    n_anomaly = len(anomaly["x"])
+    n_total = len(records)
+    anomaly_pct = (n_anomaly / n_total * 100) if n_total else 0
+
     fig.update_layout(
-        scene_camera={
-            "up": {"x": 0, "y": 0, "z": 1},
-            "center": {"x": 0, "y": 0, "z": -0.1},
-            "eye": {"x": 1.5, "y": 1.5, "z": 1.2},
-        }
+        uirevision="ml-3d-scatter",
+        scene={
+            "uirevision": "ml-3d-scene",
+            "xaxis": {"title": "지터 (ms)", **_AXIS_STYLE},
+            "yaxis": {"title": "PPS", **_AXIS_STYLE},
+            "zaxis": {"title": "손실률 (%)", **_AXIS_STYLE},
+            "bgcolor": "rgba(10, 15, 28, 1)",
+            "aspectmode": "cube",
+        },
+        paper_bgcolor="rgba(17, 24, 39, 1)",
+        font={"color": "#e5e7eb", "size": 11},
+        title={
+            "text": (
+                '<span style="font-size:15px;font-weight:600;">3D Anomaly Detection View</span>'
+                f'<br><span style="font-size:11px;color:#9ca3af;">'
+                f"Total {n_total} pts  |  Anomaly {n_anomaly} ({anomaly_pct:.1f}%)"
+                f"  |  Threshold {threshold:.2f}</span>"
+            ),
+            "x": 0.5,
+            "xanchor": "center",
+        },
+        height=ML_CHART_HEIGHT_3D,
+        margin={"l": 0, "r": 0, "t": 70, "b": 10},
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": -0.02,
+            "xanchor": "center",
+            "x": 0.5,
+            "bgcolor": "rgba(17, 24, 39, 0.7)",
+            "bordercolor": "rgba(75, 85, 99, 0.5)",
+            "borderwidth": 1,
+            "font": {"size": 11, "color": "#d1d5db"},
+            "itemsizing": "constant",
+        },
+        showlegend=True,
     )
 
     return fig
 
 
-def _scores_to_colors(
+def _split_by_status(
+    jitters: list[float],
+    pps_values: list[float],
+    loss_rates: list[float],
+    timestamps: list[str],
     scores: list[float],
     threshold: float,
-) -> list[str]:
-    """이상 점수를 색상으로 변환."""
-    colors = []
-    for s in scores:
+) -> tuple[dict, dict, dict]:
+    """데이터를 정상/경고/이상으로 분류하여 트레이스별 데이터 반환."""
+    groups: dict[str, dict] = {
+        k: {"x": [], "y": [], "z": [], "texts": [], "sizes": [], "scores": []}
+        for k in ("normal", "warning", "anomaly")
+    }
+    warn_upper = threshold + 0.1
+
+    for j, p, l, ts, s in zip(jitters, pps_values, loss_rates, timestamps, scores):
+        text = (
+            f"<b>시간:</b> {ts}<br>"
+            f"<b>지터:</b> {j:.2f} ms<br>"
+            f"<b>PPS:</b> {p}<br>"
+            f"<b>손실률:</b> {l:.2f}%<br>"
+            f"<b>이상 점수:</b> {s:.3f}"
+        )
         if s < threshold:
-            colors.append("#ef4444")
-        elif s < threshold + 0.1:
-            colors.append("#f59e0b")
+            g = groups["anomaly"]
+            size = max(7, min(18, 7 + abs(s) * 22))
+        elif s < warn_upper:
+            g = groups["warning"]
+            size = 6
         else:
-            colors.append("#3b82f6")
-    return colors
+            g = groups["normal"]
+            size = 4
+        g["x"].append(j)
+        g["y"].append(p)
+        g["z"].append(l)
+        g["texts"].append(text)
+        g["sizes"].append(size)
+        g["scores"].append(s)
+
+    return groups["normal"], groups["warning"], groups["anomaly"]
 
 
