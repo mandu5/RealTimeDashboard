@@ -26,6 +26,13 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
+from ..constants import (
+    ML_N_ESTIMATORS,
+    ML_RANDOM_STATE,
+    ML_TOP_CONTRIBUTING_FEATURES,
+    ML_Z_SCORE_THRESHOLD,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,8 +69,8 @@ class MLAnomalyDetector:
     def __init__(
         self,
         contamination: float = 0.05,
-        n_estimators: int = 100,
-        random_state: int = 42,
+        n_estimators: int = ML_N_ESTIMATORS,
+        random_state: int = ML_RANDOM_STATE,
     ):
         """
         Args:
@@ -140,6 +147,7 @@ class MLAnomalyDetector:
             AnomalyResult: 탐지 결과
         """
         if not self._is_fitted:
+            logger.debug("[ML] 모델이 학습되지 않아 기본 결과 반환")
             return AnomalyResult(
                 is_anomaly=False,
                 anomaly_score=0.0,
@@ -182,9 +190,9 @@ class MLAnomalyDetector:
             상위 3개 기여 특성 (name, z_score)
         """
         contributions = []
-        for _i, (val, name) in enumerate(zip(x_scaled, self._feature_names)):
+        for val, name in zip(x_scaled, self._feature_names):
             z_score = float(val)  # StandardScaler 출력 = Z-score
-            if abs(z_score) > 1.5:  # 1.5 표준편차 이상 벗어남
+            if abs(z_score) > ML_Z_SCORE_THRESHOLD:
                 contributions.append({
                     "name": name,
                     "z_score": round(z_score, 2),
@@ -192,18 +200,19 @@ class MLAnomalyDetector:
 
         # Z-score 절대값 기준 정렬
         contributions.sort(key=lambda x: abs(x["z_score"]), reverse=True)
-        return contributions[:3]
+        return contributions[:ML_TOP_CONTRIBUTING_FEATURES]
 
     def _score_to_confidence(self, score: float) -> float:
         """이상 점수를 신뢰도 (0~1)로 변환.
 
-        Isolation Forest score 범위: 약 -0.5 ~ 0.5
-        낮을수록 이상 → 높은 신뢰도로 이상 판정
+        모델의 실제 결정 경계(offset_)를 기준으로 sigmoid 스무딩 적용.
+        offset에서 confidence ≈ 0.5, 그 이상 → 0, 그 이하 → 1.
         """
-        # 점수가 낮을수록 이상 → 신뢰도 높음
-        # 대략 -0.3 이하면 확실한 이상
-        confidence = max(0.0, min(1.0, (0.3 - score) / 0.6))
-        return round(confidence, 2)
+        threshold = float(self._model.offset_)
+        spread = max(abs(threshold) * 0.5, 0.05)
+        raw = (threshold - score) / spread
+        confidence = 1.0 / (1.0 + np.exp(-raw))
+        return round(float(confidence), 2)
 
     def save(self, filepath: str) -> None:
         """모델 저장.

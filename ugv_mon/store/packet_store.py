@@ -25,11 +25,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from ..constants import (
+    JITTER_NOISE_THRESHOLD_MS,
+    JITTER_OUTLIER_THRESHOLD_MS,
+    MAX_CONNECTION_HISTORY,
+    MAX_MODE_TRANSITIONS,
+    STREAM_RESTART_GAP_MS,
+)
 
-# 임계값 상수
-MAX_GAP_MS = 3000         # 3초 이상 갭 → 스트림 재시작
-MAX_JITTER_MS = 200       # 200ms 이상 지터 → 이상치
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -76,7 +80,7 @@ class PacketRecord:
 
     def to_chart_point(self, pps: int) -> dict:
         """차트 데이터 포인트 변환."""
-        jitter = self.jitter_ms if self.jitter_ms and self.jitter_ms <= MAX_JITTER_MS else 0
+        jitter = self.jitter_ms if self.jitter_ms and self.jitter_ms <= JITTER_OUTLIER_THRESHOLD_MS else 0
         return {
             "timestamp": self.timestamp.strftime("%H:%M:%S"),
             "pps": pps,
@@ -188,16 +192,16 @@ class PacketStore:
         prev_msg_state["timestamp"] = timestamp
 
         # 큰 갭 스킵 (스트림 재시작으로 간주)
-        if interval_ms > MAX_GAP_MS:
+        if interval_ms > STREAM_RESTART_GAP_MS:
             prev_msg_state["interval"] = None
             return None, interval_ms
 
         prev_interval = prev_msg_state.get("interval")
         jitter_ms = None
 
-        if isinstance(prev_interval, (int, float)) and prev_interval <= MAX_GAP_MS:
+        if isinstance(prev_interval, (int, float)) and prev_interval <= STREAM_RESTART_GAP_MS:
             diff = abs(interval_ms - prev_interval)
-            if diff <= 5:  # JITTER_THRESHOLD_MS
+            if diff <= JITTER_NOISE_THRESHOLD_MS:
                 jitter_ms = diff
 
         prev_msg_state["interval"] = interval_ms
@@ -229,19 +233,23 @@ class PacketStore:
     # 통계 조회 (stats_calculator 대체)
     # =========================================================================
 
+    def _get_pps_unlocked(self) -> int:
+        """초당 패킷 수 (최근 1초, 락 없이 호출)."""
+        if not self._records:
+            return 0
+        one_sec_ago = datetime.now() - timedelta(seconds=1)
+        return sum(1 for r in self._records if r.timestamp >= one_sec_ago)
+
     def get_pps(self) -> int:
         """초당 패킷 수 (최근 1초)."""
         with self._lock:
-            if not self._records:
-                return 0
-            one_sec_ago = datetime.now() - timedelta(seconds=1)
-            return sum(1 for r in self._records if r.timestamp >= one_sec_ago)
+            return self._get_pps_unlocked()
 
     def get_current_jitter(self) -> float:
         """현재(최신) 지터 값."""
         with self._lock:
             for r in reversed(self._records):
-                if r.jitter_ms is not None and r.jitter_ms <= MAX_JITTER_MS:
+                if r.jitter_ms is not None and r.jitter_ms <= JITTER_OUTLIER_THRESHOLD_MS:
                     return round(r.jitter_ms, 2)
             return 0.0
 
@@ -250,7 +258,7 @@ class PacketStore:
         with self._lock:
             jitters = [
                 r.jitter_ms for r in self._records
-                if r.jitter_ms is not None and r.jitter_ms <= MAX_JITTER_MS
+                if r.jitter_ms is not None and r.jitter_ms <= JITTER_OUTLIER_THRESHOLD_MS
             ]
             if not jitters:
                 return 0.0
@@ -340,7 +348,7 @@ class PacketStore:
             if not self._records:
                 return []
 
-            pps = self.get_pps()
+            pps = self._get_pps_unlocked()
             recent = list(self._records)[-limit:]
             result = [r.to_chart_point(pps) for r in recent]
 
@@ -391,9 +399,9 @@ class PacketStore:
                 "duration": None,
             })
 
-            # 최대 100개 유지
-            if len(self._connection_history) > 100:
-                self._connection_history = self._connection_history[-100:]
+            # 최대 개수 유지
+            if len(self._connection_history) > MAX_CONNECTION_HISTORY:
+                self._connection_history = self._connection_history[-MAX_CONNECTION_HISTORY:]
 
             self._last_connection_state = connected
 
@@ -407,9 +415,9 @@ class PacketStore:
                     "to": new_mode,
                 })
 
-                # 최대 50개 유지
-                if len(self._mode_transitions) > 50:
-                    self._mode_transitions = self._mode_transitions[-50:]
+                # 최대 개수 유지
+                if len(self._mode_transitions) > MAX_MODE_TRANSITIONS:
+                    self._mode_transitions = self._mode_transitions[-MAX_MODE_TRANSITIONS:]
 
             self._last_op_mode = new_mode
 

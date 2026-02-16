@@ -40,7 +40,7 @@ class RuleDetector:
     """
 
     # 기본 임계값
-    DEFAULT_THRESHOLDS = {
+    DEFAULT_THRESHOLDS: dict[str, float] = {
         "jitter_max_ms": 50.0,      # 지터 상한 (ms)
         "pps_min": 50,              # PPS 하한
         "loss_rate_max": 5.0,       # 손실률 상한 (%)
