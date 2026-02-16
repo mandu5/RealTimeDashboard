@@ -25,6 +25,7 @@ from threading import Lock
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from ..models import OperationalPayload
     from ..pipeline import BatchProcessResult
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class StatsService:
 
         # 상태
         self._last_packet_time: Optional[datetime] = None
-        self._last_payload: Optional[object] = None  # OperationalPayload
+        self._last_payload: Optional["OperationalPayload"] = None
 
     # =========================================================================
     # 업데이트
@@ -91,7 +92,7 @@ class StatsService:
         """파싱 성공률 (0-100%)."""
         with self._lock:
             if self._total_packets == 0:
-                return 100.0
+                return 0.0
             return round((self._parse_success / self._total_packets) * 100, 1)
 
     def get_checksum_fail_rate(self) -> float:
@@ -125,7 +126,7 @@ class StatsService:
             return ""
 
     @property
-    def last_payload(self) -> Optional[object]:
+    def last_payload(self) -> Optional["OperationalPayload"]:
         """마지막 페이로드 (OperationalPayload)."""
         with self._lock:
             return self._last_payload
