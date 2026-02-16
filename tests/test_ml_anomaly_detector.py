@@ -77,14 +77,14 @@ class TestFeatureExtractor:
         """품질 점수 범위 (0-100)."""
         extractor = FeatureExtractor()
         
-        # 좋은 상태
+        # 좋은 상태 (라이브 환경 PPS 1000 기준)
         fv_good = extractor.extract({
             "jitter_current": 1.0,
-            "pps": 100,
+            "pps": 1000,
             "packet_loss": 0,
         })
         assert 80 <= fv_good.features["quality_score"] <= 100
-        
+
         # 나쁜 상태
         extractor.reset()
         fv_bad = extractor.extract({

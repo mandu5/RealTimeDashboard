@@ -18,7 +18,7 @@ Single Responsibility: 데이터 조합 및 Dict 빌드만 수행.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any
 
 from ..constants import DEVICE_NAMES
 from ..models import EMERGENCY_SOURCE_NAMES
@@ -50,8 +50,8 @@ class DashboardBuilder:
         direction: str,
         filter_str: str,
         interface: str,
-        ml_data: dict,
-    ) -> dict:
+        ml_data: dict[str, Any],
+    ) -> dict[str, Any]:
         """대시보드 데이터 빌드 (25키).
 
         Args:
