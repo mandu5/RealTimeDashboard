@@ -556,6 +556,7 @@ def create_ml_analysis_panel(data: dict) -> dmc.Card:
     # ML 결과 추출
     is_anomaly = ml_data.get("is_anomaly", False)
     confidence = ml_data.get("confidence", 0)
+    threshold = ml_data.get("threshold", -0.3)
     contributing_features = ml_data.get("contributing_features", [])
     records = ml_data.get("records", [])
     score_history = ml_data.get("score_history", [])
@@ -589,7 +590,7 @@ def create_ml_analysis_panel(data: dict) -> dmc.Card:
                     html.Div(
                         dcc.Graph(
                             id="ml-3d-scatter",
-                            figure=create_anomaly_3d_scatter(records, anomaly_scores),
+                            figure=create_anomaly_3d_scatter(records, anomaly_scores, threshold),
                             config={"displayModeBar": False},
                             style={"height": "350px"},
                         ),
@@ -614,7 +615,7 @@ def create_ml_analysis_panel(data: dict) -> dmc.Card:
                     html.Div(
                         dcc.Graph(
                             id="ml-anomaly-timeline",
-                            figure=create_anomaly_timeline(score_history),
+                            figure=create_anomaly_timeline(score_history, threshold),
                             config={"displayModeBar": False},
                             style={"height": "250px"},
                         ),
@@ -630,7 +631,7 @@ def create_ml_analysis_panel(data: dict) -> dmc.Card:
                         style={"flex": "1"},
                     ),
                 ],
-                style={"display": "flex", "gap": "16px", "marginTop": "16px"},
+                style={"display": "flex", "gap": "16px", "marginTop": "24px"},
             ),
         ],
         withBorder=True, p="lg", radius="md",

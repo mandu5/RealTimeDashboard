@@ -1,9 +1,10 @@
 """Dash 콜백 모듈 - 대시보드 상호작용 처리."""
 
 import logging
-from typing import Protocol
+import time
+from typing import Any, Protocol
 
-from dash import Input, Output, State, html
+from dash import Dash, Input, Output, State, html, no_update
 from dash.exceptions import PreventUpdate
 
 from ..config import config
@@ -28,11 +29,11 @@ class DataProviderProtocol(Protocol):
 
     콜백에서 사용. provider._is_connected 속성으로 연결 상태 조회.
     """
-    def update_data(self, prev_data: dict) -> dict: ...
+    def update_data(self, prev_data: dict[str, Any]) -> dict[str, Any]: ...
     def clear_logs(self) -> None: ...
 
 
-def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
+def register_callbacks(app: Dash, data_provider: DataProviderProtocol) -> None:
     """모든 대시보드 콜백 등록."""
     if data_provider is None:
         raise ValueError("data_provider cannot be None")
@@ -41,11 +42,12 @@ def register_callbacks(app, data_provider: DataProviderProtocol) -> None:
     _register_component_callback(app, data_provider)
     _register_control_callbacks(app, data_provider)
     _register_ui_callbacks(app, data_provider)
-    _register_ml_panel_callback(app)  # ML 패널 콜백 추가
+    _register_ml_panel_callback(app)
+    _register_ml_3d_interaction_callback(app)
 
 
 
-def _register_data_callback(app, provider) -> None:
+def _register_data_callback(app: Dash, provider: DataProviderProtocol) -> None:
     """데이터 폴링 콜백 (2초 interval)."""
     @app.callback(
         Output("dashboard-data", "data"),
@@ -60,7 +62,7 @@ def _register_data_callback(app, provider) -> None:
         return provider.update_data(current_data)
 
 
-def _register_component_callback(app, provider) -> None:
+def _register_component_callback(app: Dash, provider: DataProviderProtocol) -> None:
     """메인 UI 컴포넌트 업데이트."""
     @app.callback(
         [
@@ -119,7 +121,7 @@ def _register_component_callback(app, provider) -> None:
         )
 
 
-def _register_control_callbacks(app, provider) -> None:
+def _register_control_callbacks(app: Dash, provider: DataProviderProtocol) -> None:
     """제어 버튼 콜백."""
     @app.callback(Output("is-paused", "data"), Input("pause-btn", "n_clicks"),
                   State("is-paused", "data"), prevent_initial_call=True)
@@ -137,7 +139,7 @@ def _register_control_callbacks(app, provider) -> None:
         return current_data
 
 
-def _register_ui_callbacks(app, provider) -> None:
+def _register_ui_callbacks(app: Dash, provider: DataProviderProtocol) -> None:
     """UI 제어 콜백 (연결, 방향)."""
     @app.callback(
         [
@@ -184,7 +186,24 @@ def _register_ui_callbacks(app, provider) -> None:
         return children, "blue" if direction == "status" else "orange"
 
 
-def _register_ml_panel_callback(app) -> None:
+def _register_ml_3d_interaction_callback(app: Dash) -> None:
+    """3D 차트 relayout 시 타임스탬프 저장 (드래그/줌 중 폴링 억제용)."""
+    app.clientside_callback(
+        """
+        function(relayoutData) {
+            if (relayoutData && Object.keys(relayoutData).length > 0) {
+                return Date.now();
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("ml-3d-relayout-ts", "data"),
+        Input("ml-3d-scatter", "relayoutData"),
+        prevent_initial_call=True,
+    )
+
+
+def _register_ml_panel_callback(app: Dash) -> None:
     """ML 패널 업데이트 콜백."""
     from ..ui.layouts.ml_charts import (
         create_anomaly_3d_scatter,
@@ -201,8 +220,9 @@ def _register_ml_panel_callback(app) -> None:
             Output("ml-confidence-gauge", "figure"),
         ],
         Input("dashboard-data", "data"),
+        State("ml-3d-relayout-ts", "data"),
     )
-    def update_ml_panel(data):
+    def update_ml_panel(data, relayout_ts):
         ml_data = data.get("ml", {})
         if ml_data.get("model_status", "not_ready") == "not_ready":
             raise PreventUpdate
@@ -210,11 +230,27 @@ def _register_ml_panel_callback(app) -> None:
         score_history = ml_data.get("score_history", [])
         contributing_features = ml_data.get("contributing_features", [])
         confidence = ml_data.get("confidence", 0)
+        threshold = ml_data.get("threshold", -0.3)
         anomaly_scores = [r.get("anomaly_score", 0) for r in records] if records else []
 
+        timeline_fig = create_anomaly_timeline(score_history, threshold)
+        feature_fig = create_feature_contribution_chart(contributing_features)
+        confidence_fig = create_confidence_gauge(confidence)
+
+        # 드래그/줌 중일 때는 3D 업데이트 건너뜀 (2.5초 이내 relayout 있으면)
+        now_ms = int(time.time() * 1000)
+        if relayout_ts and (now_ms - relayout_ts) < 2500:
+            return (
+                no_update,
+                timeline_fig,
+                feature_fig,
+                confidence_fig,
+            )
+
+        scatter_fig = create_anomaly_3d_scatter(records, anomaly_scores, threshold)
         return (
-            create_anomaly_3d_scatter(records, anomaly_scores),
-            create_anomaly_timeline(score_history),
-            create_feature_contribution_chart(contributing_features),
-            create_confidence_gauge(confidence),
+            scatter_fig,
+            timeline_fig,
+            feature_fig,
+            confidence_fig,
         )

@@ -48,6 +48,8 @@ def create_main_layout(initial_data: dict, initial_logs: list) -> dmc.MantinePro
             # - 새로고침 시 초기값(False)으로 자동 리셋됨.
             # - Dash 공식 패턴: 콜백 간 클라이언트 상태 공유에 dcc.Store 사용 권장.
             dcc.Store(id="is-paused", data=False),
+            # 3D 차트 relayout 시각 (드래그/줌 중 폴링 업데이트 억제용)
+            dcc.Store(id="ml-3d-relayout-ts", data=0),
 
             # 폴링 인터벌
             dcc.Interval(
