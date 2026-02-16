@@ -17,10 +17,26 @@ Single Responsibility: ML/Rule 앙상블 탐지만 수행.
 """
 
 import logging
+import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
+from ..constants import (
+    ML_DEFAULT_THRESHOLD,
+    ML_DISPLAY_RECORDS,
+    ML_DISPLAY_SCORES,
+    ML_FALLBACK_ANOMALY_SCORE,
+    ML_MAX_CHART_RECORDS,
+    ML_MAX_SCORE_HISTORY,
+    ML_MIN_TRAINING_SAMPLES,
+    ML_RULE_ONLY_CONFIDENCE,
+    ML_RULE_VIOLATED_Z_SCORE,
+)
+
 if TYPE_CHECKING:
+    from ..analysis.ml_anomaly_detector import AnomalyResult
+    from ..analysis.ml_pipeline import MLPipeline
+    from ..analysis.rule_detector import RuleDetector, RuleResult
     from ..store.packet_store import PacketStore
 
 logger = logging.getLogger(__name__)
@@ -42,19 +58,20 @@ class MLService:
 
     def __init__(
         self,
-        min_samples: int = 500,
-        max_records: int = 200,
-        max_history: int = 120,
+        min_samples: int = ML_MIN_TRAINING_SAMPLES,
+        max_records: int = ML_MAX_CHART_RECORDS,
+        max_history: int = ML_MAX_SCORE_HISTORY,
     ):
         self._min_samples = min_samples
         self._max_records = max_records
         self._max_history = max_history
 
         # 파이프라인
-        self._pipeline: Optional[object] = None  # MLPipeline
-        self._rule_detector: Optional[object] = None  # RuleDetector
+        self._pipeline: Optional["MLPipeline"] = None
+        self._rule_detector: Optional["RuleDetector"] = None
 
         # 히스토리
+        self._history_lock = threading.Lock()
         self._records: list[dict] = []  # 3D 차트용
         self._score_history: list[dict] = []  # 타임라인용
 
@@ -137,58 +154,108 @@ class MLService:
         stats["checksum_fail_rate"] = store.get_checksum_fail_rate()
         return stats
 
-    def _build_result(self, rule_result, ml_result, ml_ready: bool) -> dict:
+    def _build_result(
+        self,
+        rule_result: Optional["RuleResult"],
+        ml_result: Optional["AnomalyResult"],
+        ml_ready: bool,
+    ) -> dict:
         """앙상블 결과 빌드."""
         rule_anomaly = rule_result.is_anomaly if rule_result else False
         ml_anomaly = ml_result.is_anomaly if ml_result else False
-        final_anomaly = rule_anomaly or ml_anomaly
 
-        # 탐지 소스 결정
-        if rule_anomaly and ml_anomaly:
-            detection_source = "Both"
-        elif rule_anomaly:
-            detection_source = "Rule"
-        elif ml_anomaly:
-            detection_source = "ML"
-        else:
-            detection_source = None
-
-        # 신뢰도 계산
+        # ML이 학습된 상태에서는 ML 판정을 우선 사용
         if ml_result:
-            confidence = ml_result.confidence
-        elif final_anomaly:
-            confidence = 0.7  # Rule만 있을 때 기본 신뢰도
+            final_anomaly = ml_anomaly or rule_anomaly
         else:
-            confidence = 0.0
+            final_anomaly = rule_anomaly
 
-        # 기여 특성
-        contributing_features = []
-        if ml_result and ml_result.contributing_features:
-            contributing_features = [
-                {"name": f["name"], "z_score": f["z_score"]}
-                for f in ml_result.contributing_features
-            ]
-        elif rule_result and rule_result.violated_rules:
-            for rule in rule_result.violated_rules:
-                contributing_features.append({
-                    "name": rule,
-                    "z_score": 2.5,
-                })
+        detection_source = self._determine_detection_source(rule_anomaly, ml_anomaly)
+        confidence = self._calculate_confidence(
+            rule_anomaly, ml_anomaly, ml_result, final_anomaly
+        )
+        contributing_features = self._extract_contributing_features(
+            rule_result, ml_result
+        )
+        threshold = self._get_current_threshold()
+
+        with self._history_lock:
+            records = self._records[-ML_DISPLAY_RECORDS:]
+            score_history = self._score_history[-ML_DISPLAY_SCORES:]
 
         return {
             "model_status": "ready" if ml_ready else "rule_only",
             "is_anomaly": final_anomaly,
             "anomaly_score": (
                 ml_result.anomaly_score if ml_result
-                else (-0.5 if final_anomaly else 0.0)
+                else (ML_FALLBACK_ANOMALY_SCORE if final_anomaly else 0.0)
             ),
             "confidence": confidence,
+            "threshold": threshold,
             "detection_source": detection_source,
             "rule_violated": rule_result.violated_rules if rule_result else [],
             "contributing_features": contributing_features,
-            "records": self._records[-100:],
-            "score_history": self._score_history[-60:],
+            "records": records,
+            "score_history": score_history,
         }
+
+    def _determine_detection_source(
+        self,
+        rule_anomaly: bool,
+        ml_anomaly: bool,
+    ) -> Optional[str]:
+        """탐지 소스 결정."""
+        if rule_anomaly and ml_anomaly:
+            return "Both"
+        elif rule_anomaly:
+            return "Rule"
+        elif ml_anomaly:
+            return "ML"
+        return None
+
+    def _calculate_confidence(
+        self,
+        rule_anomaly: bool,
+        ml_anomaly: bool,
+        ml_result: Optional["AnomalyResult"],
+        final_anomaly: bool,
+    ) -> float:
+        """신뢰도 계산."""
+        if ml_result:
+            if ml_anomaly:
+                return ml_result.confidence
+            elif rule_anomaly and not ml_anomaly:
+                return ML_RULE_ONLY_CONFIDENCE
+            else:
+                return ml_result.confidence
+        elif final_anomaly:
+            return ML_RULE_ONLY_CONFIDENCE
+        return 0.0
+
+    def _extract_contributing_features(
+        self,
+        rule_result: Optional["RuleResult"],
+        ml_result: Optional["AnomalyResult"],
+    ) -> list[dict]:
+        """기여 특성 추출."""
+        if ml_result and ml_result.contributing_features:
+            return [
+                {"name": f["name"], "z_score": f["z_score"]}
+                for f in ml_result.contributing_features
+            ]
+        elif rule_result and rule_result.violated_rules:
+            return [
+                {"name": rule, "z_score": ML_RULE_VIOLATED_Z_SCORE}
+                for rule in rule_result.violated_rules
+            ]
+        return []
+
+    def _get_current_threshold(self) -> float:
+        """현재 이상 탐지 임계값 반환."""
+        if self._pipeline and self._pipeline.is_trained:
+            status = self._pipeline.get_status()
+            return status.get("threshold", ML_DEFAULT_THRESHOLD)
+        return ML_DEFAULT_THRESHOLD
 
     # =========================================================================
     # 히스토리 관리
@@ -205,24 +272,27 @@ class MLService:
             "loss_rate": stats.get("loss_rate", 0),
             "anomaly_score": 0,
         }
-        self._records.append(record)
-        if len(self._records) > self._max_records:
-            self._records = self._records[-self._max_records:]
+        with self._history_lock:
+            self._records.append(record)
+            if len(self._records) > self._max_records:
+                self._records = self._records[-self._max_records:]
 
     def _update_score_history(self, score: float, now: datetime) -> None:
         """타임라인용 점수 히스토리 업데이트."""
-        self._score_history.append({
-            "timestamp": now.strftime("%H:%M:%S"),
-            "score": score,
-        })
-        if len(self._score_history) > self._max_history:
-            self._score_history = self._score_history[-self._max_history:]
+        with self._history_lock:
+            self._score_history.append({
+                "timestamp": now.strftime("%H:%M:%S"),
+                "score": score,
+            })
+            if len(self._score_history) > self._max_history:
+                self._score_history = self._score_history[-self._max_history:]
 
-        # 레코드에 점수 반영
-        if self._records:
-            self._records[-1]["anomaly_score"] = score
+            # 레코드에 점수 반영
+            if self._records:
+                self._records[-1]["anomaly_score"] = score
 
     def reset(self) -> None:
         """히스토리 초기화."""
-        self._records.clear()
-        self._score_history.clear()
+        with self._history_lock:
+            self._records.clear()
+            self._score_history.clear()
