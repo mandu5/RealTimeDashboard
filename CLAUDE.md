@@ -9,6 +9,7 @@ UGV-MON is a Python 3.9+ real-time monitoring dashboard for VIC (Vehicle Integra
 ## Commands
 
 ### Run Application
+
 ```bash
 # Mock mode (default, no network privileges needed)
 python3 run.py
@@ -18,11 +19,13 @@ sudo python3 run.py --mode live --interface lo
 ```
 
 ### Tests
+
 ```bash
 pytest tests/
 ```
 
 ### Linting
+
 Configured via `ruff.toml`: line length 100, double quotes, rules E/W/F/I/B/C4/UP/SIM/RUF.
 
 ## Architecture
