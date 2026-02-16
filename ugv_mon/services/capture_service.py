@@ -181,6 +181,8 @@ class CaptureService:
             try:
                 if self._sniffer.is_running():
                     self._sniffer.stop()
-            except Exception:
-                pass
+            except OSError as e:
+                logger.warning(f"[Capture] 스니퍼 정리 중 OS 오류: {e}")
+            except Exception as e:
+                logger.warning(f"[Capture] 스니퍼 정리 중 예외: {e}")
             self._sniffer = None
