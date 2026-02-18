@@ -7,7 +7,7 @@ ICD v1.0 Parser - 헤더 및 페이로드 파싱.
 import logging
 import struct
 from enum import IntEnum
-from typing import TypeVar, Union
+from typing import Optional, TypeVar, Union
 
 from ..models import (
     AUTHORITIES,
@@ -32,6 +32,21 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=IntEnum)
 
+# 운용 상태 페이로드 최소 파싱 크기
+_OPERATIONAL_PAYLOAD_MIN_SIZE: int = 5
+
+# 운용 상태 바이트 비트 필드 (status_byte)
+_OP_MODE_SHIFT: int = 5
+_OP_MODE_MASK: int = 0x07   # Bit 7~5
+_AUTHORITY_SHIFT: int = 2
+_AUTHORITY_MASK: int = 0x03  # Bit 3~2
+_DRIVING_STATE_MASK: int = 0x03  # Bit 1~0
+
+# 비상정지 비트 필드 (emergency_bits)
+_EMERGENCY_SRC_SHIFT: int = 6
+_EMERGENCY_SRC_MASK: int = 0x3FF   # Bit 15~6
+_EMERGENCY_COMPLETE_MASK: int = 0x01  # Bit 0
+
 
 def safe_enum(enum_class: type[T], value: int) -> Union[T, int]:
     """안전한 enum 변환 (알 수 없는 값은 int로 반환)."""
@@ -44,11 +59,9 @@ def safe_enum(enum_class: type[T], value: int) -> Union[T, int]:
 class ICDParser:
     """ICD v1.0 패킷 파서."""
 
-    # 운용 상태 페이로드가 있는 msg_code와 예상 data_length
-    OPERATIONAL_MSG_CODE = 0x01
-    OPERATIONAL_DATA_LENGTH = 87
+    OPERATIONAL_DATA_LENGTH: int = 87
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._parse_count = 0
         self._success_count = 0
         self._checksum_fail_count = 0
@@ -60,7 +73,11 @@ class ICDParser:
 
         # 최소 길이 검증
         if len(data) < ICD_MIN_PACKET_SIZE:
-            return ParseResult(success=False, error=f"Packet too short: {len(data)} < {ICD_MIN_PACKET_SIZE}", raw_size=len(data))
+            return ParseResult(
+                success=False,
+                error=f"Packet too short: {len(data)} < {ICD_MIN_PACKET_SIZE}",
+                raw_size=len(data),
+            )
 
         # 체크섬 검증
         checksum_ok = self._verify_checksum(data)
@@ -72,20 +89,21 @@ class ICDParser:
             header = self._parse_header(data)
         except Exception as e:
             logger.warning(f"Header parsing failed: {e}")
-            return ParseResult(success=False, checksum_ok=checksum_ok, error=f"Header parsing failed: {e}", raw_size=len(data))
+            return ParseResult(
+                success=False,
+                checksum_ok=checksum_ok,
+                error=f"Header parsing failed: {e}",
+                raw_size=len(data),
+            )
 
         # 페이로드 추출
         raw_payload = data[ICD_HEADER_SIZE:-ICD_CHECKSUM_SIZE] if len(data) > ICD_MIN_PACKET_SIZE else None
 
         # 운용 상태 페이로드 파싱 시도 (0x01, data_length=87)
         payload = None
-        msg_code_value = header.msg_code if isinstance(header.msg_code, int) else header.msg_code.value
-
-        if (msg_code_value == self.OPERATIONAL_MSG_CODE and
-            header.data_length == self.OPERATIONAL_DATA_LENGTH and
-            raw_payload and len(raw_payload) >= 5):
+        if self._is_operational_packet(header, raw_payload):
             try:
-                payload = self._parse_operational_payload(raw_payload)
+                payload = self._parse_operational_payload(raw_payload)  # type: ignore[arg-type]
                 self._payload_success_count += 1
             except Exception as e:
                 logger.debug(f"Operational payload parsing failed: {e}")
@@ -97,7 +115,15 @@ class ICDParser:
             raw_payload=raw_payload,
             payload=payload,
             checksum_ok=checksum_ok,
-            raw_size=len(data)
+            raw_size=len(data),
+        )
+
+    def _is_operational_packet(self, header: ICDHeader, raw_payload: Optional[bytes]) -> bool:
+        """운용 상태 페이로드 파싱 조건 확인 (0x01, data_length=87)."""
+        return (
+            header.msg_code == MsgCode.TYPE_01
+            and header.data_length == self.OPERATIONAL_DATA_LENGTH
+            and raw_payload is not None
         )
 
     def _verify_checksum(self, data: bytes) -> bool:
@@ -126,8 +152,8 @@ class ICDParser:
 
     def _parse_operational_payload(self, payload: bytes) -> OperationalPayload:
         """운용 상태 페이로드 파싱 (5 bytes 필수, 총 87 bytes)."""
-        if len(payload) < 5:
-            raise ValueError(f"페이로드 길이 부족: {len(payload)} < 5")
+        if len(payload) < _OPERATIONAL_PAYLOAD_MIN_SIZE:
+            raise ValueError(f"페이로드 길이 부족: {len(payload)} < {_OPERATIONAL_PAYLOAD_MIN_SIZE}")
 
         # 1~2 바이트: 장치 연결 목록 (Bit 9~0)
         device_bits = struct.unpack('<H', payload[0:2])[0]
@@ -138,9 +164,9 @@ class ICDParser:
 
         # 3 바이트: 운용 상태
         status_byte = payload[2]
-        operation_mode_raw = (status_byte >> 5) & 0x07  # Bit 7~5
-        authority_raw = (status_byte >> 2) & 0x03       # Bit 3~2
-        driving_state_raw = status_byte & 0x03          # Bit 1~0
+        operation_mode_raw = (status_byte >> _OP_MODE_SHIFT) & _OP_MODE_MASK
+        authority_raw = (status_byte >> _AUTHORITY_SHIFT) & _AUTHORITY_MASK
+        driving_state_raw = status_byte & _DRIVING_STATE_MASK
 
         operation_mode = OPERATION_MODES.get(operation_mode_raw, f"Unknown({operation_mode_raw})")
         authority = AUTHORITIES.get(authority_raw, f"Unknown({authority_raw})")
@@ -148,8 +174,8 @@ class ICDParser:
 
         # 4~5 바이트: 비상정지
         emergency_bits = struct.unpack('<H', payload[3:5])[0]
-        emergency_sources_raw = (emergency_bits >> 6) & 0x3FF  # Bit 15~6
-        emergency_complete = bool(emergency_bits & 0x01)       # Bit 0
+        emergency_sources_raw = (emergency_bits >> _EMERGENCY_SRC_SHIFT) & _EMERGENCY_SRC_MASK
+        emergency_complete = bool(emergency_bits & _EMERGENCY_COMPLETE_MASK)
 
         emergency_sources = [
             EMERGENCY_SOURCE_NAMES[i]

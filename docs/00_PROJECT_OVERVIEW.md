@@ -83,5 +83,5 @@ sudo python3 run.py --mode live --interface eno2
 
 ```bash
 python3 -m pytest tests/ -v
-# 52개 테스트 통과
+# 54개 테스트 통과
 ```

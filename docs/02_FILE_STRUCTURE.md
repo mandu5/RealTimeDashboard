@@ -10,7 +10,7 @@ opus1/
 ├── requirements.txt          # 의존성 목록
 ├── pyproject.toml            # 프로젝트 설정
 │
-├── tests/                    # 단위 테스트 (50개)
+├── tests/                    # 단위 테스트 (54개)
 ├── docs/                     # 문서
 │
 └── ugv_mon/                  # 메인 Python 패키지
