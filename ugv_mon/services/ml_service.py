@@ -18,6 +18,7 @@ Single Responsibility: ML/Rule 앙상블 탐지만 수행.
 
 import logging
 import threading
+from collections import deque
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
@@ -70,10 +71,10 @@ class MLService:
         self._pipeline: Optional["MLPipeline"] = None
         self._rule_detector: Optional["RuleDetector"] = None
 
-        # 히스토리
+        # 히스토리 (deque로 O(1) 삽입/삭제)
         self._history_lock = threading.Lock()
-        self._records: list[dict] = []  # 3D 차트용
-        self._score_history: list[dict] = []  # 타임라인용
+        self._records: deque[dict] = deque(maxlen=max_records)
+        self._score_history: deque[dict] = deque(maxlen=max_history)
 
         self._init_detectors()
 
@@ -115,9 +116,6 @@ class MLService:
         # 현재 통계 가져오기
         current_stats = self._get_current_stats(store)
 
-        # 레코드 히스토리 업데이트
-        self._update_records(current_stats, now)
-
         # === Rule-Based 탐지 (항상 실행) ===
         rule_result = None
         if self._rule_detector:
@@ -140,7 +138,12 @@ class MLService:
 
             if ml_ready:
                 ml_result = self._pipeline.predict(current_stats)
-                self._update_score_history(ml_result.anomaly_score, now)
+
+        # 레코드/점수 히스토리를 단일 락으로 원자적 업데이트 (race condition 방지)
+        with self._history_lock:
+            self._append_record(current_stats, now)
+            if ml_result is not None:
+                self._append_score(ml_result.anomaly_score, now)
 
         # === 앙상블 판정 ===
         return self._build_result(rule_result, ml_result, ml_ready)
@@ -180,8 +183,8 @@ class MLService:
         threshold = self._get_current_threshold()
 
         with self._history_lock:
-            records = self._records[-ML_DISPLAY_RECORDS:]
-            score_history = self._score_history[-ML_DISPLAY_SCORES:]
+            records = list(self._records)[-ML_DISPLAY_RECORDS:]
+            score_history = list(self._score_history)[-ML_DISPLAY_SCORES:]
 
         return {
             "model_status": "ready" if ml_ready else "rule_only",
@@ -261,35 +264,24 @@ class MLService:
     # 히스토리 관리
     # =========================================================================
 
-    def _update_records(self, stats: dict, now: datetime) -> None:
-        """3D 차트용 레코드 업데이트."""
-        if stats is None:
-            stats = {}
-        record = {
+    def _append_record(self, stats: dict, now: datetime) -> None:
+        """3D 차트용 레코드 추가 (호출자가 _history_lock 보유 중이어야 함)."""
+        self._records.append({
             "timestamp": now.strftime("%H:%M:%S"),
             "jitter_current": stats.get("jitter_current", 0),
             "pps": stats.get("pps", 0),
             "loss_rate": stats.get("loss_rate", 0),
             "anomaly_score": 0,
-        }
-        with self._history_lock:
-            self._records.append(record)
-            if len(self._records) > self._max_records:
-                self._records = self._records[-self._max_records:]
+        })
 
-    def _update_score_history(self, score: float, now: datetime) -> None:
-        """타임라인용 점수 히스토리 업데이트."""
-        with self._history_lock:
-            self._score_history.append({
-                "timestamp": now.strftime("%H:%M:%S"),
-                "score": score,
-            })
-            if len(self._score_history) > self._max_history:
-                self._score_history = self._score_history[-self._max_history:]
-
-            # 레코드에 점수 반영
-            if self._records:
-                self._records[-1]["anomaly_score"] = score
+    def _append_score(self, score: float, now: datetime) -> None:
+        """타임라인용 점수 추가 및 최신 레코드 반영 (호출자가 _history_lock 보유 중이어야 함)."""
+        self._score_history.append({
+            "timestamp": now.strftime("%H:%M:%S"),
+            "score": score,
+        })
+        if self._records:
+            self._records[-1]["anomaly_score"] = score
 
     def reset(self) -> None:
         """히스토리 초기화."""

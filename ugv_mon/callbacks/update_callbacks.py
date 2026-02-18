@@ -8,6 +8,7 @@ from dash import Dash, Input, Output, State, html, no_update
 from dash.exceptions import PreventUpdate
 
 from ..config import config
+from ..constants import ML_DEFAULT_THRESHOLD
 from ..ui.components.device_grid import create_device_grid
 from ..ui.components.kpi_card import create_kpi_cards_row
 from ..ui.layouts.charts import create_communication_chart
@@ -22,6 +23,14 @@ from ..ui.layouts.panels import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _connection_btn_children(is_conn: bool) -> list:
+    """연결 상태 토글 버튼 자식 요소 생성."""
+    return [
+        html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
+        html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
+    ]
 
 
 class DataProviderProtocol(Protocol):
@@ -94,11 +103,6 @@ def _register_component_callback(app: Dash, provider: DataProviderProtocol) -> N
         latest = chart_data[-1] if chart_data else {"pps": 0, "jitter": 0}
         is_conn = data.get("connected", False)
 
-        btn_children = [
-            html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
-            html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
-        ]
-
         return (
             create_status_chips(data),
             create_kpi_cards_row(data),
@@ -108,7 +112,7 @@ def _register_component_callback(app: Dash, provider: DataProviderProtocol) -> N
             create_communication_chart(chart_data, data.get("jitterP95", 0), config.ui.chart_time_range_sec),
             f"{latest.get('pps', 0):,}",
             f"{latest.get('jitter', 0):.1f} ms",
-            btn_children,
+            _connection_btn_children(is_conn),
             "filled" if is_conn else "outline",
             "green" if is_conn else "red",
             # 연결 이력, 모드 전이, 비상정지 컨텐츠
@@ -158,12 +162,8 @@ def _register_ui_callbacks(app: Dash, provider: DataProviderProtocol) -> None:
         provider.toggle_connection()
         new_data = provider.update_data(current_data or {})
         is_conn = new_data.get("connected", False)
-        btn_children = [
-            html.Span("연결상태", style={"fontSize": "12px", "opacity": "0.7", "marginRight": "4px"}),
-            html.Span("연결됨" if is_conn else "연결끊김", style={"fontSize": "12px", "fontWeight": "600"}),
-        ]
         return (
-            btn_children,
+            _connection_btn_children(is_conn),
             "filled" if is_conn else "outline",
             "green" if is_conn else "red",
             new_data,
@@ -230,7 +230,7 @@ def _register_ml_panel_callback(app: Dash) -> None:
         score_history = ml_data.get("score_history", [])
         contributing_features = ml_data.get("contributing_features", [])
         confidence = ml_data.get("confidence", 0)
-        threshold = ml_data.get("threshold", -0.3)
+        threshold = ml_data.get("threshold", ML_DEFAULT_THRESHOLD)
         anomaly_scores = [r.get("anomaly_score", 0) for r in records] if records else []
 
         timeline_fig = create_anomaly_timeline(score_history, threshold)
