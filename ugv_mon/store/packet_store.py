@@ -21,7 +21,7 @@
 import logging
 import threading
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -34,6 +34,90 @@ from ..constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class NetworkMetrics:
+    """네트워크 메트릭 계산기 (지터/패킷 손실).
+
+    PacketStore에서 네트워크 수학 로직을 분리한 클래스.
+    msg_code별 이전 패킷 상태를 추적하여 RFC 3550 기반 지터와
+    시퀀스 갭 기반 패킷 손실을 계산합니다.
+    """
+
+    def __init__(self) -> None:
+        self._prev_by_msgcode: dict[int, dict] = {}
+        self._loss_by_msgcode: dict[int, int] = {}
+
+    def calculate(
+        self,
+        timestamp: datetime,
+        msg_code: int,
+        sequence: int,
+    ) -> tuple[Optional[float], Optional[float]]:
+        """지터와 간격 계산 후 패킷 손실도 업데이트.
+
+        Args:
+            timestamp: 패킷 수신 시각
+            msg_code: ICD 메시지 코드
+            sequence: 시퀀스 번호 (0~15)
+
+        Returns:
+            (jitter_ms, interval_ms) — 계산 불가 시 None
+        """
+        if msg_code not in self._prev_by_msgcode:
+            self._prev_by_msgcode[msg_code] = {
+                "timestamp": None,
+                "interval": None,
+                "sequence": None,
+            }
+
+        state = self._prev_by_msgcode[msg_code]
+        prev_ts = state["timestamp"]
+
+        if prev_ts is None:
+            state["timestamp"] = timestamp
+            state["sequence"] = sequence
+            return None, None
+
+        interval_ms = (timestamp - prev_ts).total_seconds() * 1000
+        state["timestamp"] = timestamp
+
+        # 큰 갭 스킵 (스트림 재시작으로 간주)
+        if interval_ms > STREAM_RESTART_GAP_MS:
+            state["interval"] = None
+            state["sequence"] = sequence
+            return None, interval_ms
+
+        # 지터 계산
+        prev_interval = state["interval"]
+        jitter_ms: Optional[float] = None
+        if isinstance(prev_interval, (int, float)) and prev_interval <= STREAM_RESTART_GAP_MS:
+            diff = abs(interval_ms - prev_interval)
+            if diff <= JITTER_NOISE_THRESHOLD_MS:
+                jitter_ms = diff
+
+        state["interval"] = interval_ms
+
+        # 패킷 손실 계산 (시퀀스 갭, 4-bit 순환)
+        prev_seq = state["sequence"]
+        state["sequence"] = sequence
+        if prev_seq is not None:
+            gap = ((sequence & 0x0F) - (prev_seq & 0x0F)) % 16
+            if gap > 1:
+                self._loss_by_msgcode[msg_code] = (
+                    self._loss_by_msgcode.get(msg_code, 0) + (gap - 1)
+                )
+
+        return jitter_ms, interval_ms
+
+    def get_total_loss(self) -> int:
+        """총 패킷 손실 수."""
+        return sum(self._loss_by_msgcode.values())
+
+    def reset(self) -> None:
+        """상태 초기화."""
+        self._prev_by_msgcode.clear()
+        self._loss_by_msgcode.clear()
 
 
 @dataclass
@@ -104,13 +188,10 @@ class PacketStore:
         self._records: deque[PacketRecord] = deque(maxlen=max_records)
         self._lock = threading.Lock()
 
-        # 지터 계산용 이전 패킷 상태 (msg_code별)
-        self._prev_packet_by_msgcode: dict[int, dict] = {}
+        # 네트워크 메트릭 계산기 (지터/패킷 손실)
+        self._metrics = NetworkMetrics()
 
-        # 패킷 손실 누적 (msg_code별)
-        self._packet_loss_by_msgcode: dict[int, int] = {}
-
-        # 차트 데이터 캐시 (2초마다 갱신)
+        # 차트 데이터 캐시 (1초 TTL)
         self._chart_cache: list[dict] = []
         self._chart_cache_time: Optional[datetime] = None
 
@@ -139,89 +220,13 @@ class PacketStore:
             계산된 지터 (ms), 계산 불가시 None
         """
         with self._lock:
-            # 지터 계산
-            jitter_ms, interval_ms = self._calculate_jitter(
-                record.timestamp,
-                record.msg_code
+            jitter_ms, interval_ms = self._metrics.calculate(
+                record.timestamp, record.msg_code, record.sequence
             )
-
-            # 패킷 손실 계산
-            self._calculate_packet_loss(record.msg_code, record.sequence)
-
-            # 레코드에 지터/간격 추가
-            updated_record = PacketRecord(
-                timestamp=record.timestamp,
-                msg_code=record.msg_code,
-                sequence=record.sequence,
-                size=record.size,
-                jitter_ms=jitter_ms,
-                interval_ms=interval_ms,
-                parse_ok=record.parse_ok,
-                checksum_ok=record.checksum_ok,
-                operation_mode=record.operation_mode,
-                authority=record.authority,
-            )
-
+            updated_record = replace(record, jitter_ms=jitter_ms, interval_ms=interval_ms)
             self._records.append(updated_record)
             self._prune_old_records(record.timestamp)
-
             return jitter_ms
-
-    def _calculate_jitter(
-        self,
-        timestamp: datetime,
-        msg_code: int
-    ) -> tuple[Optional[float], Optional[float]]:
-        """지터 계산 (RFC 3550 기반 인접 간격 차이)."""
-        if msg_code not in self._prev_packet_by_msgcode:
-            self._prev_packet_by_msgcode[msg_code] = {
-                "timestamp": None,
-                "interval": None,
-                "sequence": None,
-            }
-
-        prev_msg_state = self._prev_packet_by_msgcode[msg_code]
-        prev_ts = prev_msg_state.get("timestamp")
-
-        if prev_ts is None:
-            prev_msg_state["timestamp"] = timestamp
-            prev_msg_state["interval"] = None
-            return None, None
-
-        interval_ms = (timestamp - prev_ts).total_seconds() * 1000
-        prev_msg_state["timestamp"] = timestamp
-
-        # 큰 갭 스킵 (스트림 재시작으로 간주)
-        if interval_ms > STREAM_RESTART_GAP_MS:
-            prev_msg_state["interval"] = None
-            return None, interval_ms
-
-        prev_interval = prev_msg_state.get("interval")
-        jitter_ms = None
-
-        if isinstance(prev_interval, (int, float)) and prev_interval <= STREAM_RESTART_GAP_MS:
-            diff = abs(interval_ms - prev_interval)
-            if diff <= JITTER_NOISE_THRESHOLD_MS:
-                jitter_ms = diff
-
-        prev_msg_state["interval"] = interval_ms
-        return jitter_ms, interval_ms
-
-    def _calculate_packet_loss(self, msg_code: int, sequence: int) -> None:
-        """패킷 손실 계산 (시퀀스 갭 분석, 4-bit 순환)."""
-        if msg_code not in self._prev_packet_by_msgcode:
-            return
-
-        prev_msg_state = self._prev_packet_by_msgcode[msg_code]
-        prev_seq = prev_msg_state.get("sequence")
-        prev_msg_state["sequence"] = sequence
-
-        if prev_seq is not None:
-            gap = ((sequence & 0x0F) - (prev_seq & 0x0F)) % 16
-            if gap > 1:
-                self._packet_loss_by_msgcode[msg_code] = (
-                    self._packet_loss_by_msgcode.get(msg_code, 0) + (gap - 1)
-                )
 
     def _prune_old_records(self, current_time: datetime) -> None:
         """오래된 레코드 제거."""
@@ -269,7 +274,7 @@ class PacketStore:
     def get_packet_loss(self) -> int:
         """총 패킷 손실 수."""
         with self._lock:
-            return sum(self._packet_loss_by_msgcode.values())
+            return self._metrics.get_total_loss()
 
     def get_availability(self, window_sec: int = 300) -> float:
         """가용성 계산 (%)."""
@@ -398,10 +403,7 @@ class PacketStore:
                 "connected": connected,
                 "duration": None,
             })
-
-            # 최대 개수 유지
-            if len(self._connection_history) > MAX_CONNECTION_HISTORY:
-                self._connection_history = self._connection_history[-MAX_CONNECTION_HISTORY:]
+            self._connection_history = self._connection_history[-MAX_CONNECTION_HISTORY:]
 
             self._last_connection_state = connected
 
@@ -415,9 +417,7 @@ class PacketStore:
                     "to": new_mode,
                 })
 
-                # 최대 개수 유지
-                if len(self._mode_transitions) > MAX_MODE_TRANSITIONS:
-                    self._mode_transitions = self._mode_transitions[-MAX_MODE_TRANSITIONS:]
+                self._mode_transitions = self._mode_transitions[-MAX_MODE_TRANSITIONS:]
 
             self._last_op_mode = new_mode
 
@@ -452,8 +452,7 @@ class PacketStore:
         """전체 상태 초기화."""
         with self._lock:
             self._records.clear()
-            self._prev_packet_by_msgcode.clear()
-            self._packet_loss_by_msgcode.clear()
+            self._metrics.reset()
             self._chart_cache.clear()
             self._chart_cache_time = None
             self._connection_history.clear()
@@ -466,8 +465,7 @@ class PacketStore:
         """스트림 상태만 리셋 (방향 전환 시 지터 오염 방지)."""
         with self._lock:
             logger.info("[STORE] reset_stream_state")
-            self._prev_packet_by_msgcode.clear()
-            self._packet_loss_by_msgcode.clear()
+            self._metrics.reset()
 
     @property
     def record_count(self) -> int:
