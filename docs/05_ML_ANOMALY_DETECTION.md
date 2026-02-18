@@ -68,7 +68,7 @@ class MLAnomalyDetector:
 ```python
 class RuleDetector:
     def detect(self, metrics: Dict) -> RuleResult  # is_anomaly, violated_rules 포함
-    #         is_anomaly, triggered_rules
+    #         is_anomaly, violated_rules
 ```
 
 ### analysis/feature_extractor.py
@@ -83,20 +83,19 @@ class FeatureExtractor:
 
 ---
 
-## 특성 벡터 (Features)
+## 특성 벡터 (Features, 7차원)
 
-ML 모델에 입력되는 특성:
+ML 모델에 입력되는 특성 (`feature_extractor.py`):
 
-| 특성          | 설명         | 정규화       |
-| ------------- | ------------ | ------------ |
-| pps           | 초당 패킷 수 | 0-1 스케일링 |
-| jitter_p95    | 지터 P95     | 로그 스케일  |
-| packet_loss   | 패킷 손실 수 | 0-1 스케일링 |
-| availability  | 가용성 %     | 0-100        |
-| parse_success | 파싱 성공률  | 0-100        |
-| msg_01_ratio  | 0x01 비율    | 0-1          |
-| msg_25_ratio  | 0x25 비율    | 0-1          |
-| msg_40_ratio  | 0x40 비율    | 0-1          |
+| 특성              | 설명                   | 계산/의미                                |
+| ----------------- | ---------------------- | ---------------------------------------- |
+| jitter_current    | 현재 지터 (ms)         | 패킷 간격 변동 \|현재-이전\|             |
+| jitter_p95        | 지터 95백분위 (ms)     | 상위 5% 제외                             |
+| jitter_volatility | 지터 변동성            | \|P95-current\|/P95, 클수록 불안정       |
+| pps               | 초당 패킷 수           | 최근 1초 수신량                          |
+| pps_trend         | PPS 추세               | (현재-prev)/prev, 음수=성능 저하         |
+| loss_rate         | 손실률 (%)             | packet_loss/(pps+packet_loss)×100        |
+| quality_score     | 종합 품질 점수 (0–100) | 지터 40% + PPS 40% + 손실률 20% 가중평균 |
 
 ---
 
@@ -113,70 +112,75 @@ ML 모델에 입력되는 특성:
 ```python
 IsolationForest(
     n_estimators=100,      # 트리 개수
-    contamination=0.05,    # 이상치 비율
+    contamination=0.10,    # 예상 이상치 비율 (constants.ML_CONTAMINATION)
     random_state=42,       # 재현성
     max_samples='auto'
 )
 ```
 
-### 이상 점수
+### 이상 점수 (Anomaly Score)
 
-- **음수**: 정상 (나무 깊이가 깊음)
-- **양수**: 이상 (나무 깊이가 얕음)
-- **임계값**: 5σ (표준편차 5배)
+- **출처**: `score_samples()` 반환값
+- **범위**: 대략 -1 ~ 0 (정상에 가까울수록 0, 이상일수록 -1에 가까움)
+- **의미**: 격리 깊이 기반. 이상치는 적은 분할로 격리되어 **점수가 낮음(음수)**.
+- **임계값**: 모델 `offset_` (학습 시 결정, 기본 -0.3). `score < threshold` → 이상.
 
 ---
 
-## 규칙 기반 탐지
+## 규칙 기반 탐지 (rule_detector.py)
 
-### 탐지 규칙
+### 탐지 규칙 (기본 임계값)
 
-| 규칙        | 조건               | 심각도 |
-| ----------- | ------------------ | ------ |
-| PPS 급락    | pps < 1            | HIGH   |
-| 지터 급등   | jitter_p95 > 100ms | MEDIUM |
-| 가용성 저하 | availability < 80% | HIGH   |
-| 패킷 손실   | packet_loss > 10   | MEDIUM |
+| 규칙           | 조건                     | 위반 시 라벨       |
+| -------------- | ------------------------ | ------------------ |
+| 지터 상한      | jitter_current > 50 ms   | jitter_high        |
+| PPS 하한       | pps < 50 (0 제외)        | pps_low            |
+| 손실률 상한    | loss_rate > 5%           | loss_high          |
+| 체크섬 실패율  | checksum_fail_rate > 10% | checksum_fail      |
 
-### 앙상블 로직
+### 앙상블 로직 (MLService)
 
-```python
-# 둘 중 하나라도 이상 감지 시 알람
-is_anomaly = ml_result or rule_result
-```
+- ML 학습 시: `final_anomaly = ml_anomaly or rule_anomaly`
+- ML 미학습(Cold Start): Rule만 사용, Rule 위반 시 confidence 0.5
 
 ---
 
 ## 시각화 패널
 
-### 3D 산점도 (PCA)
+### 3D 산점도 (원시축, PCA 미사용)
 
-- 3차원 PCA 축소
-- 정상(파랑) / 이상(빨강) 점
-- 현재 위치 하이라이트
+- **축**: X=지터(ms), Y=PPS, Z=손실률(%)
+- **분류**: 이상(score < threshold, 빨강), 경고(threshold~threshold+0.1, 노랑), 정상(파랑)
+- 마커 크기: 이상일수록 큼 (7~18)
 
 ### 이상 타임라인
 
-- 시간별 이상 점수
-- 임계값 라인 표시
-- 이상 구간 음영
+- Y축: 이상 점수 (범위 -1 ~ 0.5)
+- 임계선: threshold 수평 점선
+- 이상 구간: score < threshold인 연속 구간 빨간 배경
 
-### 신뢰도 게이지
+### 신뢰도 게이지 (초록→노랑→빨강)
 
-- 0-100% 신뢰도
-- 색상 그라데이션 (초록→빨강)
+| 구간    | 색상 | 의미                  |
+| ------- | ---- | --------------------- |
+| 0–30%   | 초록 | 정상/경미한 이상      |
+| 30–70%  | 노랑 | 경계 구간, 주의 필요  |
+| 70–100% | 빨강 | 확실한 이상, 즉시 확인 |
 
-### 기여 특성 차트
+- **신뢰도 계산**: `sigmoid((threshold - score) / spread)`, Rule 전용 시 0 또는 0.5
 
-- 수평 막대 그래프
-- 이상에 가장 많이 기여한 특성
+### 기여 특성 차트 (Z-Score)
+
+- |z-score| > 2.0 인 특성만 상위 3개 표시
+- 색상: |z| > 3 빨강, > 2 주황, > 1.5 노랑
+- Rule 위반 시: jitter_high, pps_low 등 z=2.5로 표시
 
 ---
 
 ## 학습 흐름
 
 ```text
-1. 데이터 수집 (최소 100개 샘플)
+1. 데이터 수집 (최소 500개 샘플, ML_MIN_TRAINING_SAMPLES)
         ↓
 2. 특성 추출 (FeatureExtractor)
         ↓
@@ -189,7 +193,7 @@ is_anomaly = ml_result or rule_result
 
 ### 학습 조건
 
-- 최소 샘플: 100개
+- 최소 샘플: 500개
 - 재학습 주기: 1시간 (선택적)
 
 ---
