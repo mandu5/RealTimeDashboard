@@ -40,7 +40,7 @@ MAX_MODE_TRANSITIONS: int = 50             # 모드 전이 최대 보관 수
 # ML Service 관련 상수
 # =============================================================================
 
-ML_MIN_TRAINING_SAMPLES: int = 500          # 학습에 필요한 최소 샘플 수
+ML_MIN_TRAINING_SAMPLES: int = 120          # 학습에 필요한 최소 샘플 수 (1초 윈도우 기준, ~2분)
 ML_MAX_CHART_RECORDS: int = 200             # 3D 차트용 최대 레코드 수
 ML_MAX_SCORE_HISTORY: int = 120             # 타임라인용 최대 히스토리 수
 ML_DISPLAY_RECORDS: int = 100               # 결과에 포함할 최근 레코드 수

@@ -66,6 +66,8 @@ class MLAnomalyDetector:
         feature_names: 학습된 특성 이름 목록
     """
 
+    MODEL_VERSION = 2  # bump when training data format changes
+
     def __init__(
         self,
         contamination: float = 0.05,
@@ -227,6 +229,7 @@ class MLAnomalyDetector:
 
         with open(filepath, "wb") as f:
             pickle.dump({
+                "version": self.MODEL_VERSION,
                 "model": self._model,
                 "scaler": self._scaler,
                 "feature_names": self._feature_names,
@@ -247,6 +250,14 @@ class MLAnomalyDetector:
         """
         with open(filepath, "rb") as f:
             data = pickle.load(f)
+
+        saved_version = data.get("version", 1)
+        if saved_version != cls.MODEL_VERSION:
+            logger.warning(
+                f"[ML] 모델 버전 불일치 (saved={saved_version}, "
+                f"current={cls.MODEL_VERSION}), 재학습 필요"
+            )
+            raise ValueError(f"Model version mismatch: {saved_version} != {cls.MODEL_VERSION}")
 
         detector = cls(contamination=data["contamination"])
         detector._model = data["model"]
