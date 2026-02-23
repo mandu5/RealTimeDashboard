@@ -62,6 +62,10 @@ htmlcov/
 .coverage.*
 coverage.xml
 
+# ML model files (retrained per environment)
+models/
+*.pkl
+
 # Pytest
 .pytest_cache/
 ugv_mon/mock/   

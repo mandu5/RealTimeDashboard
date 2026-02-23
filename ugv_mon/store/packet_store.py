@@ -301,10 +301,12 @@ class PacketStore:
     def get_stats_history(self, limit: int = 200) -> list[dict]:
         """ML 학습용 통계 히스토리 반환.
 
-        최근 N개의 레코드에서 ML 특성 추출에 필요한 통계를 반환합니다.
+        개별 패킷이 아닌 1초 윈도우 단위로 집계하여,
+        get_stats_dict()와 동일한 분포의 통계를 반환합니다.
+        학습/예측 간 distribution shift를 방지합니다.
 
         Args:
-            limit: 반환할 최대 레코드 수
+            limit: 반환할 최대 윈도우(초) 수
 
         Returns:
             [{"jitter_current": ..., "pps": ..., ...}, ...]
@@ -313,19 +315,59 @@ class PacketStore:
             if not self._records:
                 return []
 
-            result = []
-            records_list = list(self._records)[-limit:]
+            windows: dict[str, list[PacketRecord]] = {}
+            for r in self._records:
+                key = r.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                if key not in windows:
+                    windows[key] = []
+                windows[key].append(r)
 
-            for _i, r in enumerate(records_list):
-                jitter = r.jitter_ms if r.jitter_ms is not None else 0
+            sorted_keys = sorted(windows.keys())[-limit:]
+
+            all_jitters: list[float] = []
+            cumulative_loss = 0
+            result = []
+
+            for key in sorted_keys:
+                recs = windows[key]
+                pps = len(recs)
+
+                window_jitters = [
+                    r.jitter_ms for r in recs
+                    if r.jitter_ms is not None
+                    and r.jitter_ms <= JITTER_OUTLIER_THRESHOLD_MS
+                ]
+                all_jitters.extend(window_jitters)
+
+                jitter_current = window_jitters[-1] if window_jitters else 0.0
+
+                if all_jitters:
+                    sorted_j = sorted(all_jitters)
+                    idx = min(int(len(sorted_j) * 0.95), len(sorted_j) - 1)
+                    jitter_p95 = sorted_j[idx]
+                else:
+                    jitter_p95 = 0.0
+
+                seq_by_msg: dict[int, int] = {}
+                for r in recs:
+                    if r.msg_code in seq_by_msg:
+                        prev_seq = seq_by_msg[r.msg_code]
+                        gap = ((r.sequence & 0x0F) - (prev_seq & 0x0F)) % 16
+                        if gap > 1:
+                            cumulative_loss += gap - 1
+                    seq_by_msg[r.msg_code] = r.sequence
+
+                parse_ok_count = sum(1 for r in recs if r.parse_ok)
+                checksum_fail_count = sum(1 for r in recs if not r.checksum_ok)
+
                 result.append({
-                    "timestamp": r.timestamp.isoformat(),
-                    "jitter_current": jitter,
-                    "jitter_p95": jitter,  # 개별 레코드에서는 P95 계산 불가
-                    "pps": 1,  # 개별 레코드
-                    "loss_rate": 0,  # 집계 후 계산
-                    "parse_success_rate": 100.0 if r.parse_ok else 0.0,
-                    "checksum_fail_rate": 100.0 if not r.checksum_ok else 0.0,
+                    "timestamp": key,
+                    "jitter_current": round(jitter_current, 2),
+                    "jitter_p95": round(jitter_p95, 2),
+                    "pps": pps,
+                    "packet_loss": cumulative_loss,
+                    "parse_success_rate": round(parse_ok_count / pps * 100, 1),
+                    "checksum_fail_rate": round(checksum_fail_count / pps * 100, 1),
                 })
 
             return result
