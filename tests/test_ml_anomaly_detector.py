@@ -25,7 +25,7 @@ class TestFeatureExtractor:
         extractor = FeatureExtractor()
         names = extractor.feature_names
         
-        assert len(names) == 7
+        assert len(names) == 6
         assert "jitter_current" in names
         assert "quality_score" in names
     
@@ -44,7 +44,7 @@ class TestFeatureExtractor:
         assert isinstance(fv, FeatureVector)
         assert fv.features["jitter_current"] == 2.5
         assert fv.features["jitter_p95"] == 5.0
-        assert fv.features["pps"] == 100.0
+        assert fv.features["loss_rate"] == 1.96  # loss rate for 100 pps, 2 loss is 1.96%
     
     def test_jitter_volatility(self):
         """지터 변동성 계산."""
@@ -105,7 +105,7 @@ class TestFeatureExtractor:
         
         features = extractor.extract_batch(stats_list)
         
-        assert features.shape == (3, 7)
+        assert features.shape == (3, 6)
         assert features.dtype == np.float64
 
 
@@ -117,9 +117,9 @@ class TestMLAnomalyDetector:
         """샘플 학습 데이터 생성."""
         np.random.seed(42)
         # 정상 데이터 (대부분)
-        normal = np.random.randn(100, 7) * 0.5 + 5
+        normal = np.random.randn(100, 6) * 0.5 + 5
         # 이상 데이터 (소수)
-        anomaly = np.random.randn(5, 7) * 2 + 15
+        anomaly = np.random.randn(5, 6) * 2 + 15
         return np.vstack([normal, anomaly])
     
     @pytest.fixture
@@ -127,7 +127,7 @@ class TestMLAnomalyDetector:
         """샘플 특성 이름."""
         return [
             "jitter_current", "jitter_p95", "jitter_volatility",
-            "pps", "pps_trend", "loss_rate", "quality_score"
+            "pps_trend", "loss_rate", "quality_score"
         ]
     
     def test_not_fitted_predict(self):

@@ -22,7 +22,7 @@ _AXIS_STYLE: dict = {
     "backgroundcolor": "rgba(17, 24, 39, 0.6)",
     "showbackground": True,
     "tickfont": {"size": 10, "color": "#9ca3af"},
-    "titlefont": {"size": 11, "color": "#d1d5db"},
+    "title_font": {"size": 11, "color": "#d1d5db"},
 }
 
 

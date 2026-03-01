@@ -92,10 +92,9 @@ ML 모델에 입력되는 특성 (`feature_extractor.py`):
 | jitter_current    | 현재 지터 (ms)         | 패킷 간격 변동 \|현재-이전\|             |
 | jitter_p95        | 지터 95백분위 (ms)     | 상위 5% 제외                             |
 | jitter_volatility | 지터 변동성            | \|P95-current\|/P95, 클수록 불안정       |
-| pps               | 초당 패킷 수           | 최근 1초 수신량                          |
 | pps_trend         | PPS 추세               | (현재-prev)/prev, 음수=성능 저하         |
 | loss_rate         | 손실률 (%)             | packet_loss/(pps+packet_loss)×100        |
-| quality_score     | 종합 품질 점수 (0–100) | 지터 40% + PPS 40% + 손실률 20% 가중평균 |
+| quality_score     | 종합 품질 점수 (0–100) | 지터 60% + 손실률 40% 가중평균 |
 
 ---
 
@@ -134,7 +133,6 @@ IsolationForest(
 | 규칙           | 조건                     | 위반 시 라벨       |
 | -------------- | ------------------------ | ------------------ |
 | 지터 상한      | jitter_current > 50 ms   | jitter_high        |
-| PPS 하한       | pps < 50 (0 제외)        | pps_low            |
 | 손실률 상한    | loss_rate > 5%           | loss_high          |
 | 체크섬 실패율  | checksum_fail_rate > 10% | checksum_fail      |
 

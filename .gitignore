@@ -65,7 +65,7 @@ coverage.xml
 # ML model files (retrained per environment)
 models/
 *.pkl
-
+.omc
 # Pytest
 .pytest_cache/
 ugv_mon/mock/   

@@ -157,7 +157,7 @@
 
 - Z-score \|z\| > 2.0 인 특성만 상위 3개 표시
 - 색상: \|z\| > 3 빨강, > 2 주황, > 1.5 노랑
-- Rule 위반 시: jitter_high, pps_low, loss_high, checksum_fail를 z=2.5로 표시
+- Rule 위반 시: jitter_high, loss_high, checksum_fail를 z=2.5로 표시
 
 #### Rule 기반 임계값
 

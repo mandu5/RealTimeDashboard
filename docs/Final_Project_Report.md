@@ -162,22 +162,21 @@ ServiceProvider → Callbacks → UI
 #### 모델 구성
 
 - **Isolation Forest**: 비지도 학습 기반 이상 탐지 (scikit-learn, contamination=0.10)
-- **Rule Detector**: 규칙 기반 탐지 (PPS 급락, 지터 급등, 손실률·체크섬 초과)
+- **Rule Detector**: 규칙 기반 탐지 (지터 급등, 손실률·체크섬 초과)
 - **앙상블**: ML 학습 시 ML 판정 우선, 미학습 시 Rule만 사용 (Cold Start 대응)
 
-#### 특성 벡터 (7차원)
+#### 특성 벡터 (6차원)
 
 | 특성              | 설명                   | 계산/의미                                |
 | ----------------- | ---------------------- | ---------------------------------------- |
 | jitter_current    | 현재 지터 (ms)         | 패킷 간격 변동 \|현재-이전\|             |
 | jitter_p95        | 지터 95백분위 (ms)     | 상위 5% 제외                             |
 | jitter_volatility | 지터 변동성            | \|P95-current\|/P95, 클수록 불안정       |
-| pps               | 초당 패킷 수           | 최근 1초 수신량                          |
 | pps_trend         | PPS 추세               | (현재-prev)/prev, 음수=성능 저하         |
 | loss_rate         | 손실률 (%)             | packet_loss/(pps+packet_loss)×100        |
-| quality_score     | 종합 품질 점수 (0–100) | 지터 40% + PPS 40% + 손실률 20% 가중평균 |
+| quality_score     | 종합 품질 점수 (0–100) | 지터 60% + 손실률 40% 가중평균 |
 
-※ PPS 점수: 1000 PPS=100점 기준. 지터: 5ms 이하=100점, 50ms 이상=0점. 손실률: 0%=100점, 10% 이상=0점.
+※ 지터: 5ms 이하=100점, 50ms 이상=0점. 손실률: 0%=100점, 10% 이상=0점.
 
 #### 이상 점수 (Anomaly Score)
 
@@ -209,14 +208,13 @@ ServiceProvider → Callbacks → UI
 - **표시 조건**: \|z-score\| > 2.0 인 특성만 상위 3개 표시.
 - **색상**: \|z\| > 3 빨강, > 2 주황, > 1.5 노랑. 2σ 참조선 표시.
 - **의미**: 해당 특성이 정상 범위에서 얼마나 벗어났는지.
-- **Rule 위반 시**: 위반 규칙명을 z=2.5로 표시 (jitter_high, pps_low, loss_high, checksum_fail).
+- **Rule 위반 시**: 위반 규칙명을 z=2.5로 표시 (jitter_high, loss_high, checksum_fail).
 
 #### Rule 기반 임계값
 
 | 규칙          | 조건                     | 위반 시 라벨  |
 | ------------- | ------------------------ | ------------- |
 | 지터 상한     | jitter_current > 50 ms   | jitter_high   |
-| PPS 하한      | pps < 50 (0 제외)        | pps_low       |
 | 손실률 상한   | loss_rate > 5%           | loss_high     |
 | 체크섬 실패율 | checksum_fail_rate > 10% | checksum_fail |
 

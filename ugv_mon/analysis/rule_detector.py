@@ -6,7 +6,6 @@ ML이 학습되기 전에도 즉시 사용 가능합니다.
 
 임계값 기준:
     - 지터 > 50ms → 이상
-    - PPS < 50 → 이상
     - 손실률 > 5% → 이상
 """
 
@@ -42,7 +41,6 @@ class RuleDetector:
     # 기본 임계값
     DEFAULT_THRESHOLDS: dict[str, float] = {
         "jitter_max_ms": 50.0,      # 지터 상한 (ms)
-        "pps_min": 50,              # PPS 하한
         "loss_rate_max": 5.0,       # 손실률 상한 (%)
         "checksum_fail_max": 10.0,  # 체크섬 실패율 상한 (%)
     }
@@ -77,12 +75,6 @@ class RuleDetector:
         if jitter > self._thresholds["jitter_max_ms"]:
             violated.append("jitter_high")
             details["jitter"] = jitter
-
-        # PPS 체크
-        pps = stats.get("pps", 0) or 0
-        if pps < self._thresholds["pps_min"] and pps > 0:  # 0은 무시 (연결 안 됨)
-            violated.append("pps_low")
-            details["pps"] = pps
 
         # 손실률 체크
         loss_rate = stats.get("loss_rate", 0) or 0

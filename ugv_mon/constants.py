@@ -67,11 +67,9 @@ ML_TOP_CONTRIBUTING_FEATURES: int = 3       # 상위 기여 특성 수
 
 FEATURE_VOLATILITY_MIN_THRESHOLD: float = 0.1   # 변동성 계산 최소 임계값
 FEATURE_JITTER_SCALING: float = 0.5              # 지터 점수 스케일링 계수
-FEATURE_PPS_SCALING: float = 10.0                # PPS 점수 스케일링 계수
 FEATURE_LOSS_SCALING: float = 10.0               # 손실률 점수 스케일링 계수
-FEATURE_WEIGHT_JITTER: float = 0.4               # 품질 점수 지터 가중치
-FEATURE_WEIGHT_PPS: float = 0.4                  # 품질 점수 PPS 가중치
-FEATURE_WEIGHT_LOSS: float = 0.2                 # 품질 점수 손실률 가중치
+FEATURE_WEIGHT_JITTER: float = 0.6               # 품질 점수 지터 가중치
+FEATURE_WEIGHT_LOSS: float = 0.4                 # 품질 점수 손실률 가중치
 
 # =============================================================================
 # Service Provider 관련 상수
