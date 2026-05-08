@@ -38,6 +38,7 @@ def create_main_layout(initial_data: dict, initial_logs: list) -> dmc.MantinePro
         MantineProvider로 래핑된 레이아웃
     """
     return dmc.MantineProvider(
+        forceColorScheme="light",
         children=[
             # 데이터 저장소
             dcc.Store(id="dashboard-data", data=initial_data),

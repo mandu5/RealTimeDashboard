@@ -18,6 +18,8 @@ import logging
 import os
 
 import dash
+import dash_mantine_components as dmc
+from dash import _dash_renderer
 
 from .callbacks.update_callbacks import register_callbacks
 from .config import config
@@ -25,6 +27,9 @@ from .ui.layouts.main_layout import create_main_layout
 
 # 로거 설정
 logger = logging.getLogger(__name__)
+
+# DMC v2 requires React 18 (useId hook).
+_dash_renderer._set_react_version("18.2.0")
 
 
 def create_app() -> dash.Dash:
@@ -52,6 +57,7 @@ def create_app() -> dash.Dash:
         suppress_callback_exceptions=True,
         update_title=None,  # "Updating..." 표시 비활성화
         title=config.app.name,
+        external_stylesheets=dmc.styles.ALL,
     )
 
     # =========================================================================
