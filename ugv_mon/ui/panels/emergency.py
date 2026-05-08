@@ -88,4 +88,4 @@ def create_emergency_stats_content(data: dict) -> list:
         )
         for reason, count in sorted_items[:HISTORY_DISPLAY_LIMIT]
     ]
-    return [dmc.Stack(rows, spacing="xs")]
+    return [dmc.Stack(rows, gap="xs")]

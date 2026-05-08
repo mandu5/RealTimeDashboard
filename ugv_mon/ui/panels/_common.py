@@ -76,4 +76,4 @@ def _build_list_content(
     if not items:
         return [dmc.Text(empty_msg, c="dimmed", size="sm")]
     rows = [row_builder(item) for item in reversed(items[-limit:])]
-    return [dmc.Stack(rows, spacing="xs")]
+    return [dmc.Stack(rows, gap="xs")]

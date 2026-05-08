@@ -24,7 +24,7 @@ def _connection_history_row(item: dict) -> dmc.Group:
         dmc.Badge(status, color=color, size="sm"),
         dmc.Text(_format_iso_timestamp(item.get("timestamp", "")), size="xs", c="dimmed"),
         dmc.Text(duration_str, size="xs", c="dimmed"),
-    ], spacing="xs")
+    ], gap="xs")
 
 
 def create_connection_history_content(data: dict) -> list:
@@ -52,7 +52,7 @@ def _mode_transition_row(t: dict) -> dmc.Group:
         dmc.Text("->", size="sm", c="dimmed"),
         dmc.Text(t.get("to", "?"), size="sm", fw=500),
         dmc.Text(_format_iso_timestamp(t.get("timestamp", "")), size="xs", c="dimmed"),
-    ], spacing="xs")
+    ], gap="xs")
 
 
 def create_mode_transitions_content(data: dict) -> list:

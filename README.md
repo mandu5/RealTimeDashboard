@@ -178,6 +178,27 @@ pytest tests/
 python3 run.py
 ```
 
+## Deployment
+
+### Live demo (Render, free tier)
+
+This repo includes `render.yaml` for one-click setup on Render.
+
+1. Push this repository to GitHub.
+2. In Render, choose **New +** -> **Blueprint** and select this repo.
+3. Render will create `ugv-mon-demo` web service from `render.yaml`.
+4. When deployment completes, copy the Render URL (e.g. `https://xxx.onrender.com`).
+
+### Portfolio landing page (GitHub Pages)
+
+This repo includes a static page at `portfolio-site/index.html` and a workflow at `.github/workflows/pages.yml`.
+
+1. In GitHub repo settings, open **Pages** and set source to **GitHub Actions**.
+2. Edit `portfolio-site/index.html` and replace:
+   - `https://YOUR-RENDER-SERVICE.onrender.com` with your real Render URL.
+3. Push to `main`; the `Deploy Portfolio Page` workflow publishes:
+   - `https://<your-github-id>.github.io/<repo-name>/`
+
 ## Documentation
 
 - `docs/00_PROJECT_OVERVIEW.md` - Project Overview

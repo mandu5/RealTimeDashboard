@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ugv-mon-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 run.py --mode mock --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: UGV_MON_DEBUG
+        value: "false"
