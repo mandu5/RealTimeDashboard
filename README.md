@@ -16,6 +16,8 @@ A dashboard for **passive monitoring** of UDP communication between VIC (Vehicle
 
 ### 1. Installation
 
+Requires Python 3.9+.
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -75,7 +77,7 @@ options:
 ## Project Structure
 
 ```text
-opus1/
+RealTimeDashboard/
 ├── run.py                    # Unified entry point (CLI support)
 ├── requirements.txt          # Dependencies list
 │
@@ -187,3 +189,7 @@ python3 run.py
 - `docs/06_DATA_FLOW_GUIDE.md` - Data Flow Guide
 - `docs/07_OJT_WEEKLY_LOGS.md` - OJT Weekly Logs (8 Weeks)
 - `docs/Final_Project_Report.md` - Final Project Report
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

@@ -5,7 +5,7 @@
 ## 디렉토리 구조
 
 ```
-opus1/
+RealTimeDashboard/
 ├── run.py                    # 통합 진입점 (CLI)
 ├── requirements.txt          # 의존성 목록
 ├── pyproject.toml            # 프로젝트 설정
