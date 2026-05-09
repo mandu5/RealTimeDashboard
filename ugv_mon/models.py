@@ -18,15 +18,13 @@ from typing import Optional, Union
 # =============================================================================
 
 class MsgCode(IntEnum):
-    """ICD 메시지 코드.
-
-    VIC-OCS 통신에서 사용되는 메시지 타입을 정의합니다.
+    """Demo message type bytes for the synthetic ICD layout.
 
     Attributes:
-        TYPE_01: 운용 상태 메시지 (VIC→OCS, data_length=87)
-        REMOTE_CONTROL: 원격 제어 메시지 (OCS→VIC, 80~110Hz)
-        TYPE_25: Heartbeat 메시지
-        TYPE_40: 예약됨
+        TYPE_01: Operational status (demo; typical data_length=87 in mocks)
+        REMOTE_CONTROL: Control-plane placeholder (high rate in simulations)
+        TYPE_25: Heartbeat placeholder
+        TYPE_40: Reserved / extension slot
     """
     TYPE_01 = 0x01
     REMOTE_CONTROL = 0x10
@@ -41,22 +39,22 @@ class AckFlag(IntEnum):
 
 
 class DeviceID(IntEnum):
-    """장치 ID.
+    """Synthetic endpoint IDs for the demo protocol (no real hardware binding).
 
     Attributes:
-        VIC: 차량 통합 컴퓨터 (0xB1, 포트 50000)
-        OCS: 운용통제장치 (0xA2, 포트 61000)
+        VIC: Node A placeholder (0xB1)
+        OCS: Node B placeholder (0xA2)
     """
     VIC = 0xB1
     OCS = 0xA2
 
 
 class OperationMode(Enum):
-    """운용 모드 (3비트: bits 7..5)."""
+    """Operational mode bitfield (3 bits: 7..5) — illustrative enum only."""
     PREP = 0b000              # 준비
     TRANSITION = 0b001        # 전환 중
-    UNMANNED_DRIVING = 0b010  # 무인 주행
-    UNMANNED_FIRING = 0b011   # 무인 사격
+    AUTONOMOUS_DRIVE = 0b010  # 자율 주행 (데모 시나리오)
+    RESERVED_SCENARIO = 0b011  # 예약 비트 패턴 (민감 시나리오명 사용 안 함)
     EMERGENCY_STOP = 0b100    # 비상 정지
     UNKNOWN = 0xFF
 
@@ -123,12 +121,10 @@ EMERGENCY_SOURCE_NAMES = [
 
 @dataclass
 class ICDHeader:
-    """ICD v1.0 헤더 (12 bytes).
-
-    모든 VIC-OCS 메시지의 공통 헤더 구조입니다.
+    """Demo ICD header (12 bytes) shared by synthetic messages.
 
     Attributes:
-        timestamp: VIC 시스템 타임스탬프 (ms)
+        timestamp: Sender clock (ms, demo)
         sequence: 시퀀스 번호 (0~15, 롤오버)
         source_id: 송신 장치 ID
         dest_id: 수신 장치 ID
@@ -166,9 +162,7 @@ class ICDHeader:
 
 @dataclass
 class OperationalPayload:
-    """운용 상태 페이로드 (MsgCode 0x01, 87 bytes).
-
-    VIC에서 OCS로 전송되는 운용 상태 정보입니다.
+    """Operational status payload (MsgCode 0x01, 87 bytes in demo fixtures).
 
     Attributes:
         device_bits: 장치 연결 비트맵 (10 bits)

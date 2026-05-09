@@ -37,7 +37,7 @@ from ugv_mon.config import config
 def parse_args():
     """CLI 인자 파싱."""
     parser = argparse.ArgumentParser(
-        description="UGV-MON Dashboard - VIC↔OCS 실시간 통신 모니터링",
+        description="UGV-MON Dashboard — demo UDP telemetry monitor (mock or capture)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 예시:
@@ -119,7 +119,7 @@ def main():
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║           UGV-MON Dashboard v{config.app.version}                         ║
-║         VIC↔OCS Real-time Communication Monitor              ║
+║         Demo real-time telemetry / packet monitor             ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Mode: {mode_str:<8}  Interface: {interface_display:<10}                    ║
 ║  Server: http://localhost:{port}                            ║

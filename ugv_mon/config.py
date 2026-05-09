@@ -25,9 +25,9 @@ class AppConfig:
 class NetworkConfig:
     """네트워크 캡처 설정."""
     interface: str = "lo"
-    # 양방향 캡처용 포트 (4주차 금요일)
-    vic_port: int = 50000   # VIC → OCS (상태 메시지)
-    ocs_port: int = 61000   # OCS → VIC (제어 메시지)
+    # Demo capture filters only — arbitrary ports for the synthetic two-node story
+    vic_port: int = 50000   # Node A → B (status-ish traffic in mocks/docs)
+    ocs_port: int = 61000   # Node B → A (control-ish traffic in mocks/docs)
 
 
 @dataclass

@@ -53,6 +53,16 @@ sudo -E python3 run.py
 http://localhost:8050
 ```
 
+### Docker (mock mode)
+
+```bash
+docker build -t ugv-mon:local .
+docker run --rm -p 8050:8050 ugv-mon:local
+# then open http://localhost:8050
+```
+
+The default image command runs **mock** data only. Live packet capture in a container requires extra capabilities (`NET_RAW`, `NET_ADMIN`) and host networking; use native `run.py --mode live` for that.
+
 ## CLI Options
 
 ```bash
@@ -204,7 +214,7 @@ This repo includes a static page at `portfolio-site/index.html` and a workflow a
 - `docs/00_PROJECT_OVERVIEW.md` - Project Overview
 - `docs/01_ARCHITECTURE.md` - Architecture Structure
 - `docs/02_FILE_STRUCTURE.md` - Roles by File
-- `docs/03_ICD_SPECIFICATION.md` - ICD v1.0 Parsing Specs
+- `docs/03_ICD_SPECIFICATION.md` - Message format reference (portfolio demo; not an official ICD)
 - `docs/04_KPI_METRICS.md` - KPI Definitions and Analysis
 - `docs/05_ML_ANOMALY_DETECTION.md` - ML Anomaly Detection
 - `docs/06_DATA_FLOW_GUIDE.md` - Data Flow Guide

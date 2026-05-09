@@ -1,7 +1,8 @@
 """
-ICD v1.0 Parser - 헤더 및 페이로드 파싱.
+Synthetic ICD-style packet parser (portfolio demo).
 
-5주차: 0x01 운용 상태 페이로드 파싱 추가.
+Parses a documented *toy* binary layout for teaching and UI tests — not a
+real product ICD. Header + minimal operational payload (e.g. type 0x01).
 """
 
 import logging
@@ -57,7 +58,7 @@ def safe_enum(enum_class: type[T], value: int) -> Union[T, int]:
 
 
 class ICDParser:
-    """ICD v1.0 패킷 파서."""
+    """Demo ICD-layout packet parser (header + optional status payload)."""
 
     OPERATIONAL_DATA_LENGTH: int = 87
 
