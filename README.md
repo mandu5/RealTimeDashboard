@@ -14,15 +14,11 @@ A dashboard for **passive monitoring** of UDP communication between VIC (Vehicle
 
 ## Dashboard preview
 
-**Mock mode** (representative full-page layout: KPIs, charts, packet log, ML / anomaly panel).
+Mock mode, full-page capture (two frames ~3.5s apart — polling updates charts and log).
 
-![UGV-MON dashboard — mock mode (still)](docs/images/dashboard-mock.png)
+![UGV-MON dashboard — mock mode](docs/images/dashboard-mock.gif)
 
-**Animated** (two frames ~3.5s apart — polling updates charts and log).
-
-![UGV-MON dashboard — mock mode (short loop)](docs/images/dashboard-mock.gif)
-
-To refresh these assets after UI changes:
+To refresh this asset after UI changes:
 
 ```bash
 pip install -r requirements.txt playwright pillow
@@ -219,7 +215,7 @@ This repo includes `render.yaml` for one-click setup on Render.
 
 ### Portfolio landing page (GitHub Pages)
 
-This repo includes a static showcase at `portfolio-site/index.html` and a workflow at `.github/workflows/pages.yml`. The page embeds dashboard PNG/GIF previews from `docs/images/` so reviewers see visuals without waiting on a cold-started host.
+This repo includes a static showcase at `portfolio-site/index.html` and a workflow at `.github/workflows/pages.yml`. The page can embed the dashboard preview GIF from `docs/images/` so reviewers see visuals without waiting on a cold-started host.
 
 **What to share on a resume or portfolio:** the **GitHub repository URL** plus your **GitHub Pages site URL** (after deploy). You do not need to lead with Render; free-tier live URLs are often slow or show a loading state.
 

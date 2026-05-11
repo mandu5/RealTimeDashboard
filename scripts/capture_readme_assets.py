@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Capture README dashboard preview (PNG + short GIF) from a local mock server.
+Capture README dashboard preview (short GIF) from a local mock server.
 
 Prerequisites:
   pip install playwright pillow
@@ -10,7 +10,6 @@ Usage (from repo root):
   python3 scripts/capture_readme_assets.py
 
 Starts run.py on a fixed localhost port, waits for Dash, screenshots twice, writes:
-  docs/images/dashboard-mock.png
   docs/images/dashboard-mock.gif
 """
 
@@ -18,7 +17,6 @@ from __future__ import annotations
 
 import http.client
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -64,7 +62,6 @@ def main() -> int:
         return 1
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    png_out = OUT_DIR / "dashboard-mock.png"
     gif_out = OUT_DIR / "dashboard-mock.gif"
 
     env = os.environ.copy()
@@ -112,7 +109,6 @@ def main() -> int:
             print("Screenshot failed (missing frames).", file=sys.stderr)
             return 1
 
-        shutil.copy2(frame_a, png_out)
         with Image.open(frame_a) as img_a, Image.open(frame_b) as img_b:
             img_a.save(
                 gif_out,
@@ -123,7 +119,6 @@ def main() -> int:
                 optimize=True,
             )
 
-    print(f"Wrote {png_out}")
     print(f"Wrote {gif_out}")
     return 0
 
