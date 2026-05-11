@@ -12,6 +12,24 @@ A dashboard for **passive monitoring** of UDP communication between VIC (Vehicle
 - **Dashboard**: Real-time UI based on Dash + Plotly (2-second polling)
 - **Bidirectional Capture**: Switch between Status (VIC->OCS) and Control (OCS->VIC) directions
 
+## Dashboard preview
+
+**Mock mode** (representative full-page layout: KPIs, charts, packet log, ML / anomaly panel).
+
+![UGV-MON dashboard — mock mode (still)](docs/images/dashboard-mock.png)
+
+**Animated** (two frames ~3.5s apart — polling updates charts and log).
+
+![UGV-MON dashboard — mock mode (short loop)](docs/images/dashboard-mock.gif)
+
+To refresh these assets after UI changes:
+
+```bash
+pip install -r requirements.txt playwright pillow
+playwright install chromium
+python3 scripts/capture_readme_assets.py
+```
+
 ## Quick Start
 
 ### 1. Installation
@@ -201,13 +219,12 @@ This repo includes `render.yaml` for one-click setup on Render.
 
 ### Portfolio landing page (GitHub Pages)
 
-This repo includes a static page at `portfolio-site/index.html` and a workflow at `.github/workflows/pages.yml`.
+This repo includes a static showcase at `portfolio-site/index.html` and a workflow at `.github/workflows/pages.yml`. The page embeds dashboard PNG/GIF previews from `docs/images/` so reviewers see visuals without waiting on a cold-started host.
+
+**What to share on a resume or portfolio:** the **GitHub repository URL** plus your **GitHub Pages site URL** (after deploy). You do not need to lead with Render; free-tier live URLs are often slow or show a loading state.
 
 1. In GitHub repo settings, open **Pages** and set source to **GitHub Actions**.
-2. Edit `portfolio-site/index.html` and replace:
-   - `https://YOUR-RENDER-SERVICE.onrender.com` with your real Render URL.
-3. Push to `main`; the `Deploy Portfolio Page` workflow publishes:
-   - `https://<your-github-id>.github.io/<repo-name>/`
+2. Push to `main` (or edit under `portfolio-site/**`); the `Deploy Portfolio Page` workflow publishes to a URL like `https://<your-github-id>.github.io/<repo-name>/` — the exact link appears under **Settings → Pages**.
 
 ## Documentation
 
