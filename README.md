@@ -14,9 +14,9 @@ A dashboard for **passive monitoring** of UDP communication between VIC (Vehicle
 
 ## Dashboard preview
 
-Mock mode, full-page capture (two frames ~3.5s apart — polling updates charts and log).
+Mock mode, full-page capture (two frames ~3.5s apart; polling updates charts and log).
 
-![UGV-MON dashboard — mock mode](docs/images/dashboard-mock.gif)
+![UGV-MON dashboard, mock mode](docs/images/dashboard-mock.gif)
 
 To refresh this asset after UI changes:
 
@@ -220,7 +220,7 @@ This repo includes a static showcase at `portfolio-site/index.html` and a workfl
 **What to share on a resume or portfolio:** the **GitHub repository URL** plus your **GitHub Pages site URL** (after deploy). You do not need to lead with Render; free-tier live URLs are often slow or show a loading state.
 
 1. In GitHub repo settings, open **Pages** and set source to **GitHub Actions**.
-2. Push to `main` (or edit under `portfolio-site/**`); the `Deploy Portfolio Page` workflow publishes to a URL like `https://<your-github-id>.github.io/<repo-name>/` — the exact link appears under **Settings → Pages**.
+2. Push to `main` (or edit under `portfolio-site/**`); the `Deploy Portfolio Page` workflow publishes to a URL like `https://<your-github-id>.github.io/<repo-name>/`. The exact link appears under **Settings → Pages**.
 
 ## Documentation
 
